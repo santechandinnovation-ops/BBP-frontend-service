@@ -450,10 +450,10 @@
 
         try {
             const data = await API.paths.search({
-                start_lat: originLat,
-                start_lon: originLon,
-                end_lat: destLat,
-                end_lon: destLon
+                originLat: originLat,
+                originLon: originLon,
+                destLat: destLat,
+                destLon: destLon
             });
 
             displayRoutes(data.routes);

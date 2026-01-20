@@ -25,6 +25,16 @@ async function apiRequest(endpoint, options = {}) {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
+            
+            // Handle Pydantic validation errors (array of error objects)
+            if (Array.isArray(errorData.detail)) {
+                const messages = errorData.detail.map(err => {
+                    const field = err.loc ? err.loc.join('.') : 'field';
+                    return `${field}: ${err.msg}`;
+                });
+                throw new Error(messages.join('; '));
+            }
+            
             throw new Error(errorData.detail || errorData.message || 'Request failed');
         }
 
