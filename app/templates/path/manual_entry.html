@@ -769,7 +769,10 @@
 
         obstacles.push(obstacle);
 
-        // Create marker with severity-based styling
+        // Get icon for obstacle type
+        const obstacleIcon = getObstacleIcon(obstacle.type);
+        
+        // Create marker with type-specific icon and severity-based color
         const severityColors = {
             'MINOR': '#28a745',
             'MODERATE': '#ffc107',
@@ -779,13 +782,13 @@
         const marker = L.marker([snappedLat, snappedLng], {
             icon: L.divIcon({
                 className: 'obstacle-marker',
-                html: `<i class="bi bi-exclamation-triangle-fill" style="font-size: 24px; color: ${severityColors[obstacle.severity]};"></i>`,
-                iconSize: [24, 24],
-                iconAnchor: [12, 24]
+                html: `<span style="font-size: 24px; filter: drop-shadow(1px 1px 2px ${severityColors[obstacle.severity]});">${obstacleIcon}</span>`,
+                iconSize: [28, 28],
+                iconAnchor: [14, 28]
             })
         }).addTo(map);
         
-        marker.bindTooltip(`${obstacle.type} (${obstacle.severity})`, { permanent: false });
+        marker.bindTooltip(`${obstacle.type.replace('_', ' ')} (${obstacle.severity})`, { permanent: false });
         obstacleMarkers.push(marker);
 
         renderObstacles();
@@ -796,6 +799,18 @@
         hideModeIndicator();
         
         showAlert('Obstacle added successfully!', 'success');
+    }
+
+    // Get the appropriate icon/emoji for each obstacle type
+    function getObstacleIcon(type) {
+        const icons = {
+            'POTHOLE': '🕳️',
+            'ROUGH_SURFACE': '🪨',
+            'DEBRIS': '🗑️',
+            'CONSTRUCTION': '🚧',
+            'OTHER': '⚠️'
+        };
+        return icons[type] || '⚠️';
     }
 
     function renderObstacles() {
@@ -814,7 +829,7 @@
                     <div class="card mb-2">
                         <div class="card-body py-2 d-flex justify-content-between align-items-center">
                             <div>
-                                <strong>${getObstacleEmoji(obs.type)} ${obs.type.replace('_', ' ')}</strong>
+                                <strong>${getObstacleIcon(obs.type)} ${obs.type.replace('_', ' ')}</strong>
                                 <span class="badge ${severityBadge[obs.severity]} ms-2">${obs.severity}</span>
                                 ${obs.description ? `<br><small class="text-muted">${obs.description}</small>` : ''}
                             </div>
@@ -827,17 +842,6 @@
             });
         }
         document.getElementById('obstaclesList').innerHTML = html;
-    }
-
-    function getObstacleEmoji(type) {
-        const emojis = {
-            'POTHOLE': '🕳️',
-            'ROUGH_SURFACE': '🪨',
-            'DEBRIS': '🗑️',
-            'CONSTRUCTION': '🚧',
-            'OTHER': '⚠️'
-        };
-        return emojis[type] || '⚠️';
     }
 
     function removeObstacle(index) {
