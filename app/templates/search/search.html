@@ -2,46 +2,187 @@
 
 {% block title %}Search Routes - Best Bike Paths{% endblock %}
 
+{% block extra_css %}
+<style>
+    .location-card {
+        border: 2px solid #dee2e6;
+        border-radius: 12px;
+        transition: all 0.3s;
+    }
+    .location-card.active {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+    }
+    .location-card.set {
+        border-color: #28a745;
+        background-color: #f8fff9;
+    }
+    .location-card .card-header {
+        background: transparent;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .location-input-group {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+    .location-input-group .form-control {
+        flex: 1;
+    }
+    .method-toggle {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 15px;
+    }
+    .method-toggle .btn {
+        flex: 1;
+    }
+    .coordinates-display {
+        font-family: monospace;
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+    .search-suggestions {
+        position: absolute;
+        z-index: 1050;
+        width: 100%;
+        max-height: 200px;
+        overflow-y: auto;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .search-suggestions .suggestion-item {
+        padding: 10px 15px;
+        cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .search-suggestions .suggestion-item:hover {
+        background-color: #f8f9fa;
+    }
+    .search-suggestions .suggestion-item:last-child {
+        border-bottom: none;
+    }
+    .map-instruction {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        background: rgba(13, 110, 253, 0.95);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 25px;
+        font-weight: 500;
+        display: none;
+    }
+    .map-instruction.active {
+        display: block;
+    }
+    #mapContainer {
+        position: relative;
+    }
+    .location-marker-origin {
+        color: #28a745;
+        font-size: 28px;
+    }
+    .location-marker-dest {
+        color: #dc3545;
+        font-size: 28px;
+    }
+    .obstacle-marker {
+        background: transparent;
+        border: none;
+        font-size: 20px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid p-3">
-    <h2 class="mb-4">Search Bike Routes</h2>
+    <h2 class="mb-4"><i class="bi bi-search me-2"></i>Search Bike Routes</h2>
 
-    <div class="card mb-3">
-        <div class="card-body">
-            <form id="searchForm">
-                <div class="row g-3">
-                    <div class="col-md-5">
-                        <label class="form-label">Origin</label>
-                        <div class="input-group">
-                            <input type="number" class="form-control" id="originLat" placeholder="Latitude" step="0.0001" required>
-                            <input type="number" class="form-control" id="originLon" placeholder="Longitude" step="0.0001" required>
-                            <button type="button" class="btn btn-outline-secondary" id="useCurrentLocation">
-                                <i class="bi bi-geo-alt"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="col-md-5">
-                        <label class="form-label">Destination</label>
-                        <div class="input-group">
-                            <input type="number" class="form-control" id="destLat" placeholder="Latitude" step="0.0001" required>
-                            <input type="number" class="form-control" id="destLon" placeholder="Longitude" step="0.0001" required>
-                        </div>
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label">&nbsp;</label>
-                        <button type="submit" class="btn btn-success w-100">
+    <div class="row mb-3">
+        <!-- Origin Card -->
+        <div class="col-md-6 mb-3 mb-md-0">
+            <div class="card location-card" id="originCard">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-geo-alt-fill text-success me-2"></i><strong>Origin</strong></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="clearOrigin" style="display: none;">
+                        <i class="bi bi-x"></i> Clear
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="method-toggle">
+                        <button type="button" class="btn btn-outline-primary active" data-method="search" data-target="origin">
                             <i class="bi bi-search"></i> Search
                         </button>
+                        <button type="button" class="btn btn-outline-primary" data-method="map" data-target="origin">
+                            <i class="bi bi-cursor"></i> Click Map
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" data-method="gps" data-target="origin">
+                            <i class="bi bi-crosshair"></i> GPS
+                        </button>
                     </div>
+                    <div class="position-relative">
+                        <input type="text" class="form-control" id="originSearch" placeholder="Search address, city, place...">
+                        <div class="search-suggestions" id="originSuggestions" style="display: none;"></div>
+                    </div>
+                    <div class="coordinates-display" id="originCoords">No location set</div>
+                    <input type="hidden" id="originLat">
+                    <input type="hidden" id="originLon">
                 </div>
-            </form>
+            </div>
+        </div>
+
+        <!-- Destination Card -->
+        <div class="col-md-6">
+            <div class="card location-card" id="destCard">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-flag-fill text-danger me-2"></i><strong>Destination</strong></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="clearDest" style="display: none;">
+                        <i class="bi bi-x"></i> Clear
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="method-toggle">
+                        <button type="button" class="btn btn-outline-primary active" data-method="search" data-target="dest">
+                            <i class="bi bi-search"></i> Search
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" data-method="map" data-target="dest">
+                            <i class="bi bi-cursor"></i> Click Map
+                        </button>
+                    </div>
+                    <div class="position-relative">
+                        <input type="text" class="form-control" id="destSearch" placeholder="Search address, city, place...">
+                        <div class="search-suggestions" id="destSuggestions" style="display: none;"></div>
+                    </div>
+                    <div class="coordinates-display" id="destCoords">No location set</div>
+                    <input type="hidden" id="destLat">
+                    <input type="hidden" id="destLon">
+                </div>
+            </div>
         </div>
     </div>
 
-    <div id="mapContainer" class="map-container mb-3"></div>
+    <!-- Search Button -->
+    <div class="text-center mb-3">
+        <button type="button" class="btn btn-success btn-lg px-5" id="searchBtn" disabled>
+            <i class="bi bi-signpost-2 me-2"></i> Find Routes
+        </button>
+    </div>
 
+    <!-- Map -->
+    <div id="mapContainer" class="map-container mb-3">
+        <div class="map-instruction" id="mapInstruction">
+            <i class="bi bi-cursor me-2"></i>
+            <span id="mapInstructionText">Click on the map to set origin</span>
+        </div>
+    </div>
+
+    <!-- Results -->
     <div id="resultsContainer"></div>
 </div>
 {% endblock %}
@@ -50,36 +191,260 @@
 <script>
     let map;
     let markersLayer;
+    let routesLayer;
+    let originMarker = null;
+    let destMarker = null;
+    let activeMapSelection = null; // 'origin' or 'dest'
+    let searchTimeout = null;
 
+    // Initialize map
     function initMap() {
         map = L.map('mapContainer').setView([45.4642, 9.1900], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
         markersLayer = L.layerGroup().addTo(map);
+        routesLayer = L.layerGroup().addTo(map);
+
+        map.on('click', handleMapClick);
     }
 
-    document.getElementById('useCurrentLocation').addEventListener('click', () => {
-        if ('geolocation' in navigator) {
-            navigator.geolocation.getCurrentPosition((position) => {
-                document.getElementById('originLat').value = position.coords.latitude.toFixed(4);
-                document.getElementById('originLon').value = position.coords.longitude.toFixed(4);
-                showAlert('Current location set', 'success');
-            }, (error) => {
-                showAlert('Could not get current location', 'danger');
-            });
-        } else {
-            showAlert('Geolocation not supported', 'danger');
+    // Handle map click for location selection
+    function handleMapClick(e) {
+        if (!activeMapSelection) return;
+
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+
+        setLocation(activeMapSelection, lat, lng, 'Map selection');
+        
+        // Reverse geocode to get address
+        reverseGeocode(lat, lng, activeMapSelection);
+        
+        // Exit map selection mode
+        exitMapSelectionMode();
+    }
+
+    // Reverse geocode coordinates to address
+    async function reverseGeocode(lat, lng, target) {
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+            const data = await response.json();
+            
+            if (data && data.display_name) {
+                const searchInput = document.getElementById(`${target}Search`);
+                searchInput.value = data.display_name.split(',').slice(0, 3).join(',');
+            }
+        } catch (error) {
+            console.error('Reverse geocode error:', error);
         }
-    });
+    }
 
-    document.getElementById('searchForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
+    // Search for locations using Nominatim
+    async function searchLocation(query, target) {
+        if (query.length < 3) {
+            hideSuggestions(target);
+            return;
+        }
 
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`);
+            const data = await response.json();
+            
+            showSuggestions(data, target);
+        } catch (error) {
+            console.error('Search error:', error);
+            hideSuggestions(target);
+        }
+    }
+
+    // Show suggestions dropdown
+    function showSuggestions(results, target) {
+        const container = document.getElementById(`${target}Suggestions`);
+        
+        if (results.length === 0) {
+            container.innerHTML = '<div class="suggestion-item text-muted">No results found</div>';
+            container.style.display = 'block';
+            return;
+        }
+
+        let html = '';
+        results.forEach(result => {
+            const displayName = result.display_name.split(',').slice(0, 3).join(',');
+            html += `
+                <div class="suggestion-item" data-lat="${result.lat}" data-lon="${result.lon}" data-name="${displayName}" data-target="${target}">
+                    <i class="bi bi-geo-alt me-2"></i>${displayName}
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+        container.style.display = 'block';
+
+        // Add click handlers
+        container.querySelectorAll('.suggestion-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const lat = parseFloat(item.dataset.lat);
+                const lon = parseFloat(item.dataset.lon);
+                const name = item.dataset.name;
+                const itemTarget = item.dataset.target;
+
+                setLocation(itemTarget, lat, lon, name);
+                document.getElementById(`${itemTarget}Search`).value = name;
+                hideSuggestions(itemTarget);
+            });
+        });
+    }
+
+    function hideSuggestions(target) {
+        document.getElementById(`${target}Suggestions`).style.display = 'none';
+    }
+
+    // Set location (origin or destination)
+    function setLocation(target, lat, lng, name) {
+        document.getElementById(`${target}Lat`).value = lat;
+        document.getElementById(`${target}Lon`).value = lng;
+        document.getElementById(`${target}Coords`).textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+        // Update card styling
+        const card = document.getElementById(`${target}Card`);
+        card.classList.remove('active');
+        card.classList.add('set');
+        document.getElementById(`clear${target.charAt(0).toUpperCase() + target.slice(1)}`).style.display = 'block';
+
+        // Add/update marker
+        if (target === 'origin') {
+            if (originMarker) map.removeLayer(originMarker);
+            originMarker = L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: 'location-marker-origin',
+                    html: '<i class="bi bi-geo-alt-fill"></i>',
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 28]
+                })
+            }).addTo(map).bindPopup(`<strong>Origin</strong><br>${name}`);
+        } else {
+            if (destMarker) map.removeLayer(destMarker);
+            destMarker = L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: 'location-marker-dest',
+                    html: '<i class="bi bi-flag-fill"></i>',
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 28]
+                })
+            }).addTo(map).bindPopup(`<strong>Destination</strong><br>${name}`);
+        }
+
+        updateSearchButton();
+        fitMapToBounds();
+    }
+
+    // Clear location
+    function clearLocation(target) {
+        document.getElementById(`${target}Lat`).value = '';
+        document.getElementById(`${target}Lon`).value = '';
+        document.getElementById(`${target}Coords`).textContent = 'No location set';
+        document.getElementById(`${target}Search`).value = '';
+
+        const card = document.getElementById(`${target}Card`);
+        card.classList.remove('set', 'active');
+        document.getElementById(`clear${target.charAt(0).toUpperCase() + target.slice(1)}`).style.display = 'none';
+
+        if (target === 'origin' && originMarker) {
+            map.removeLayer(originMarker);
+            originMarker = null;
+        } else if (target === 'dest' && destMarker) {
+            map.removeLayer(destMarker);
+            destMarker = null;
+        }
+
+        updateSearchButton();
+    }
+
+    // Enter map selection mode
+    function enterMapSelectionMode(target) {
+        activeMapSelection = target;
+        
+        const instruction = document.getElementById('mapInstruction');
+        const text = target === 'origin' ? 'Click on the map to set ORIGIN' : 'Click on the map to set DESTINATION';
+        document.getElementById('mapInstructionText').textContent = text;
+        instruction.classList.add('active');
+
+        document.getElementById(`${target}Card`).classList.add('active');
+        
+        // Scroll to map
+        document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Exit map selection mode
+    function exitMapSelectionMode() {
+        activeMapSelection = null;
+        document.getElementById('mapInstruction').classList.remove('active');
+        document.getElementById('originCard').classList.remove('active');
+        document.getElementById('destCard').classList.remove('active');
+    }
+
+    // Use GPS for current location
+    function useGPS(target) {
+        if (!('geolocation' in navigator)) {
+            showAlert('Geolocation is not supported by your browser', 'danger');
+            return;
+        }
+
+        showAlert('Getting your location...', 'info');
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                setLocation(target, lat, lng, 'Current location');
+                reverseGeocode(lat, lng, target);
+                showAlert('Location set to your current position', 'success');
+            },
+            (error) => {
+                showAlert('Could not get your location: ' + error.message, 'danger');
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    }
+
+    // Update search button state
+    function updateSearchButton() {
+        const originLat = document.getElementById('originLat').value;
+        const destLat = document.getElementById('destLat').value;
+        const btn = document.getElementById('searchBtn');
+        
+        btn.disabled = !(originLat && destLat);
+    }
+
+    // Fit map to show both markers
+    function fitMapToBounds() {
+        const bounds = [];
+        if (originMarker) bounds.push(originMarker.getLatLng());
+        if (destMarker) bounds.push(destMarker.getLatLng());
+
+        if (bounds.length === 2) {
+            map.fitBounds(L.latLngBounds(bounds), { padding: [50, 50] });
+        } else if (bounds.length === 1) {
+            map.setView(bounds[0], 14);
+        }
+    }
+
+    // Search routes
+    async function searchRoutes() {
         const originLat = parseFloat(document.getElementById('originLat').value);
         const originLon = parseFloat(document.getElementById('originLon').value);
         const destLat = parseFloat(document.getElementById('destLat').value);
         const destLon = parseFloat(document.getElementById('destLon').value);
+
+        if (isNaN(originLat) || isNaN(originLon) || isNaN(destLat) || isNaN(destLon)) {
+            showAlert('Please set both origin and destination', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('searchBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Searching...';
 
         showLoading('resultsContainer');
 
@@ -91,76 +456,100 @@
                 end_lon: destLon
             });
 
-            displayRoutes(data.routes, originLat, originLon, destLat, destLon);
+            displayRoutes(data.routes);
         } catch (error) {
             document.getElementById('resultsContainer').innerHTML = `
-                <div class="alert alert-danger">Failed to search routes: ${error.message}</div>
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Failed to search routes: ${error.message}
+                </div>
             `;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-signpost-2 me-2"></i> Find Routes';
         }
-    });
+    }
 
-    function displayRoutes(routes, originLat, originLon, destLat, destLon) {
-        markersLayer.clearLayers();
+    // Display routes
+    function displayRoutes(routes) {
+        routesLayer.clearLayers();
 
-        L.marker([originLat, originLon]).addTo(markersLayer)
-            .bindPopup('Origin');
-        L.marker([destLat, destLon]).addTo(markersLayer)
-            .bindPopup('Destination');
-
-        if (routes.length === 0) {
+        if (!routes || routes.length === 0) {
             document.getElementById('resultsContainer').innerHTML = `
-                <div class="alert alert-info">No routes found for this search</div>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    No routes found for this search. Try adjusting your origin or destination.
+                </div>
             `;
             return;
         }
 
-        let html = `<h4 class="mb-3">Found ${routes.length} route(s)</h4>`;
+        let html = `<h4 class="mb-3"><i class="bi bi-signpost-2 me-2"></i>Found ${routes.length} route(s)</h4>`;
 
         routes.forEach((route, index) => {
+            // Draw route on map
             const polylineCoords = [];
             route.segments.forEach(segment => {
                 polylineCoords.push([segment.startLatitude, segment.startLongitude]);
                 polylineCoords.push([segment.endLatitude, segment.endLongitude]);
             });
 
-            const color = getStatusColor(route.segments[0]?.status || 'MEDIUM');
-            const polyline = L.polyline(polylineCoords, {
+            const colors = ['#0d6efd', '#198754', '#6f42c1', '#fd7e14'];
+            const color = colors[index % colors.length];
+            
+            L.polyline(polylineCoords, {
                 color: color,
-                weight: 4,
-                opacity: 0.7
-            }).addTo(markersLayer);
+                weight: 5,
+                opacity: 0.8
+            }).addTo(routesLayer);
 
+            // Draw obstacles
             route.segments.forEach(segment => {
                 if (segment.obstacles && segment.obstacles.length > 0) {
                     segment.obstacles.forEach(obstacle => {
                         L.marker([obstacle.latitude, obstacle.longitude], {
                             icon: L.divIcon({
                                 className: 'obstacle-marker',
-                                html: '<i class="bi bi-exclamation-triangle-fill text-danger"></i>',
-                                iconSize: [20, 20]
+                                html: `<span style="font-size: 20px;">${getObstacleIcon(obstacle.type)}</span>`,
+                                iconSize: [20, 20],
+                                iconAnchor: [10, 10]
                             })
-                        }).addTo(markersLayer)
-                        .bindPopup(`<strong>${obstacle.type}</strong><br>${obstacle.severity}`);
+                        }).addTo(routesLayer)
+                        .bindPopup(`<strong>${obstacle.type}</strong><br>Severity: ${obstacle.severity}`);
                     });
                 }
             });
 
+            // Calculate total obstacles
+            const totalObstacles = route.segments.reduce((acc, seg) => acc + (seg.obstacles?.length || 0), 0);
+
             html += `
-                <div class="card mb-3">
+                <div class="card mb-3" style="border-left: 4px solid ${color};">
                     <div class="card-body">
-                        <h5 class="card-title">Route ${index + 1}</h5>
-                        <div class="row">
-                            <div class="col-md-3">
-                                <strong>Distance:</strong> ${formatDistance(route.totalDistance)}
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h5 class="card-title mb-2">
+                                <span class="badge" style="background-color: ${color};">Route ${index + 1}</span>
+                            </h5>
+                            <a href="/search/route/${route.routeId}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye me-1"></i>View Details
+                            </a>
+                        </div>
+                        <div class="row g-2 mt-2">
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted small">Distance</div>
+                                <strong>${formatDistance(route.totalDistance)}</strong>
                             </div>
-                            <div class="col-md-3">
-                                <strong>Score:</strong> ${route.score.toFixed(1)}/10
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted small">Quality Score</div>
+                                <strong class="${route.score >= 7 ? 'text-success' : route.score >= 4 ? 'text-warning' : 'text-danger'}">${route.score.toFixed(1)}/10</strong>
                             </div>
-                            <div class="col-md-3">
-                                <strong>Segments:</strong> ${route.segments.length}
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted small">Segments</div>
+                                <strong>${route.segments.length}</strong>
                             </div>
-                            <div class="col-md-3">
-                                <a href="/search/route/${route.routeId}" class="btn btn-sm btn-outline-success">View Details</a>
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted small">Obstacles</div>
+                                <strong class="${totalObstacles > 0 ? 'text-warning' : ''}">${totalObstacles}</strong>
                             </div>
                         </div>
                     </div>
@@ -170,19 +559,86 @@
 
         document.getElementById('resultsContainer').innerHTML = html;
 
-        if (routes.length > 0) {
-            map.fitBounds(markersLayer.getBounds(), { padding: [50, 50] });
+        // Fit map to show all routes
+        if (routesLayer.getLayers().length > 0) {
+            const allBounds = L.featureGroup([markersLayer, routesLayer]).getBounds();
+            map.fitBounds(allBounds, { padding: [50, 50] });
         }
     }
 
+    // Get obstacle icon
+    function getObstacleIcon(type) {
+        const icons = {
+            'POTHOLE': '🕳️',
+            'ROUGH_SURFACE': '🪨',
+            'DEBRIS': '🗑️',
+            'CONSTRUCTION': '🚧',
+            'OTHER': '⚠️'
+        };
+        return icons[type] || '⚠️';
+    }
+
+    // Event listeners
+    document.querySelectorAll('.method-toggle .btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const method = this.dataset.method;
+            const target = this.dataset.target;
+
+            // Update active button
+            this.closest('.method-toggle').querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+
+            // Handle method
+            if (method === 'map') {
+                enterMapSelectionMode(target);
+            } else if (method === 'gps') {
+                useGPS(target);
+                exitMapSelectionMode();
+            } else {
+                exitMapSelectionMode();
+                document.getElementById(`${target}Search`).focus();
+            }
+        });
+    });
+
+    // Search input handlers with debounce
+    ['origin', 'dest'].forEach(target => {
+        const input = document.getElementById(`${target}Search`);
+        
+        input.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                searchLocation(this.value, target);
+            }, 300);
+        });
+
+        input.addEventListener('focus', function() {
+            if (this.value.length >= 3) {
+                searchLocation(this.value, target);
+            }
+        });
+
+        input.addEventListener('blur', function() {
+            // Delay hide to allow click on suggestions
+            setTimeout(() => hideSuggestions(target), 200);
+        });
+    });
+
+    // Clear buttons
+    document.getElementById('clearOrigin').addEventListener('click', () => clearLocation('origin'));
+    document.getElementById('clearDest').addEventListener('click', () => clearLocation('dest'));
+
+    // Search button
+    document.getElementById('searchBtn').addEventListener('click', searchRoutes);
+
+    // Close map selection mode on escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            exitMapSelectionMode();
+        }
+    });
+
+    // Initialize
     initMap();
 </script>
-
-<style>
-    .obstacle-marker {
-        background: transparent;
-        border: none;
-        font-size: 20px;
-    }
-</style>
 {% endblock %}
