@@ -20,8 +20,14 @@
         <a href="/trip/dashboard" class="btn btn-success">Record Another</a>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_scripts %}
 <script>
+    if (!requireAuth()) {
+        throw new Error('Authentication required');
+    }
+    
     const tripId = '{{ trip_id }}';
 
     async function loadTripSummary() {

@@ -30,17 +30,21 @@
                 <i class="bi bi-search fs-4"></i>
                 <div class="small">Search</div>
             </a>
-            <a href="/trip/dashboard" class="nav-link text-center {% if '/trip' in request.url.path %}active{% endif %}">
+            <a href="/trip/dashboard" class="nav-link text-center auth-required {% if '/trip' in request.url.path %}active{% endif %}">
                 <i class="bi bi-record-circle fs-4"></i>
                 <div class="small">Record</div>
             </a>
-            <a href="/trip/history" class="nav-link text-center {% if '/trip/history' in request.url.path %}active{% endif %}">
+            <a href="/trip/history" class="nav-link text-center auth-required {% if '/trip/history' in request.url.path %}active{% endif %}">
                 <i class="bi bi-clock-history fs-4"></i>
                 <div class="small">History</div>
             </a>
-            <a href="/profile" class="nav-link text-center {% if '/profile' in request.url.path %}active{% endif %}">
+            <a href="/profile" class="nav-link text-center auth-required {% if '/profile' in request.url.path %}active{% endif %}">
                 <i class="bi bi-person fs-4"></i>
                 <div class="small">Profile</div>
+            </a>
+            <a href="/login" class="nav-link text-center guest-only {% if '/login' in request.url.path %}active{% endif %}">
+                <i class="bi bi-box-arrow-in-right fs-4"></i>
+                <div class="small">Login</div>
             </a>
         </div>
     </nav>
@@ -49,6 +53,23 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/static/js/utils.js"></script>
     <script src="/static/js/api.js"></script>
+
+    <script>
+        // Handle navbar visibility based on authentication
+        (function() {
+            const isAuth = !!localStorage.getItem('jwt_token');
+            
+            // Hide auth-required items for guests
+            document.querySelectorAll('.auth-required').forEach(el => {
+                el.style.display = isAuth ? '' : 'none';
+            });
+            
+            // Hide guest-only items for authenticated users
+            document.querySelectorAll('.guest-only').forEach(el => {
+                el.style.display = isAuth ? 'none' : '';
+            });
+        })();
+    </script>
 
     {% block extra_scripts %}{% endblock %}
 

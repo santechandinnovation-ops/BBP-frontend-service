@@ -11,7 +11,8 @@
         </div>
     </div>
 
-    <div class="row g-4 mb-5">
+    <!-- Features for authenticated users -->
+    <div class="row g-4 mb-5" id="authFeatures">
         <div class="col-md-4">
             <div class="card h-100">
                 <div class="card-body text-center">
@@ -23,7 +24,7 @@
             </div>
         </div>
 
-        <div class="col-md-4">
+        <div class="col-md-4 auth-feature">
             <div class="card h-100">
                 <div class="card-body text-center">
                     <i class="bi bi-record-circle text-success" style="font-size: 3rem;"></i>
@@ -34,7 +35,7 @@
             </div>
         </div>
 
-        <div class="col-md-4">
+        <div class="col-md-4 auth-feature">
             <div class="card h-100">
                 <div class="card-body text-center">
                     <i class="bi bi-pencil-square text-success" style="font-size: 3rem;"></i>
@@ -46,12 +47,13 @@
         </div>
     </div>
 
-    <div class="row justify-content-center">
+    <!-- Guest call-to-action -->
+    <div class="row justify-content-center" id="guestCta">
         <div class="col-md-8 text-center">
             <div class="card bg-light">
                 <div class="card-body">
                     <h5 class="card-title">Get Started</h5>
-                    <p class="card-text">Create an account to record trips and contribute paths</p>
+                    <p class="card-text">Create an account to record trips, create paths, and access your private routes</p>
                     <div class="d-flex gap-3 justify-content-center">
                         <a href="/register" class="btn btn-success">Sign Up</a>
                         <a href="/login" class="btn btn-outline-success">Login</a>
@@ -65,8 +67,26 @@
 
 {% block extra_scripts %}
 <script>
-    if (isAuthenticated()) {
-        document.querySelector('.card.bg-light').style.display = 'none';
-    }
+    (function() {
+        const isAuth = isAuthenticated();
+        
+        // Hide guest CTA for authenticated users
+        if (isAuth) {
+            document.getElementById('guestCta').style.display = 'none';
+        }
+        
+        // Hide auth-only features for guests
+        document.querySelectorAll('.auth-feature').forEach(el => {
+            if (!isAuth) {
+                el.style.display = 'none';
+            }
+        });
+        
+        // Update Search card text for guests
+        if (!isAuth) {
+            document.querySelector('#authFeatures .col-md-4').classList.remove('col-md-4');
+            document.querySelector('#authFeatures > div').classList.add('col-md-6', 'mx-auto');
+        }
+    })();
 </script>
 {% endblock %}

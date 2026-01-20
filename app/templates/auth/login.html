@@ -40,7 +40,7 @@
 {% block extra_scripts %}
 <script>
     if (isAuthenticated()) {
-        window.location.href = '/trip/dashboard';
+        window.location.href = '/';
     }
 
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -65,7 +65,7 @@
 
             showAlert('Login successful!', 'success');
             setTimeout(() => {
-                window.location.href = '/trip/dashboard';
+                window.location.href = '/';
             }, 500);
         } catch (error) {
             showAlert(error.message || 'Login failed. Please check your credentials.', 'danger');
