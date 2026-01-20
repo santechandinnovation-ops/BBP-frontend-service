@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Trip Summary - Best Bike Paths{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="text-center mb-4">
+        <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+        <h2 class="mt-3">Trip Completed!</h2>
+    </div>
+
+    <div id="summaryContent">
+        <div class="loading-spinner">
+            <div class="spinner-border text-success"></div>
+        </div>
+    </div>
+
+    <div class="text-center mt-4">
+        <a href="/trip/history" class="btn btn-outline-success me-2">View History</a>
+        <a href="/trip/dashboard" class="btn btn-success">Record Another</a>
+    </div>
+</div>
+
+<script>
+    const tripId = '{{ trip_id }}';
+
+    async function loadTripSummary() {
+        try {
+            const trip = await API.trips.getDetail(tripId);
+
+            let html = `
+                <div class="row g-3 mb-4">
+                    <div class="col-6 col-md-3">
+                        <div class="card trip-stat-card">
+                            <div class="trip-stat-value">${(trip.totalDistance / 1000).toFixed(2)}</div>
+                            <div class="trip-stat-label">Distance (km)</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="card trip-stat-card">
+                            <div class="trip-stat-value">${formatDuration(trip.duration)}</div>
+                            <div class="trip-stat-label">Duration</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="card trip-stat-card">
+                            <div class="trip-stat-value">${(trip.averageSpeed * 3.6).toFixed(1)}</div>
+                            <div class="trip-stat-label">Avg Speed (km/h)</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="card trip-stat-card">
+                            <div class="trip-stat-value">${(trip.maxSpeed * 3.6).toFixed(1)}</div>
+                            <div class="trip-stat-label">Max Speed (km/h)</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            if (trip.weather) {
+                html += `
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="bi bi-cloud-sun"></i> Weather Conditions</h5>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <strong>Temperature:</strong> ${trip.weather.temperature}°C
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>Conditions:</strong> ${trip.weather.conditions}
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>Wind:</strong> ${trip.weather.windSpeed} km/h ${trip.weather.windDirection || ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += `
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Trip Details</h5>
+                        <p><strong>Started:</strong> ${formatDateTime(trip.startTime)}</p>
+                        <p><strong>Ended:</strong> ${formatDateTime(trip.endTime)}</p>
+                        <p><strong>GPS Points:</strong> ${trip.coordinates.length}</p>
+                        <a href="/trip/detail/${tripId}" class="btn btn-outline-success">View Full Details</a>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('summaryContent').innerHTML = html;
+        } catch (error) {
+            document.getElementById('summaryContent').innerHTML = `
+                <div class="alert alert-danger">Failed to load trip summary: ${error.message}</div>
+            `;
+        }
+    }
+
+    loadTripSummary();
+</script>
+{% endblock %}

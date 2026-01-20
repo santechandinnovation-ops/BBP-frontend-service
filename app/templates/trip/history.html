@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Trip History - Best Bike Paths{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Trip History</h2>
+        <a href="/trip/dashboard" class="btn btn-success">
+            <i class="bi bi-plus-circle"></i> New Trip
+        </a>
+    </div>
+
+    <div id="historyContent">
+        <div class="loading-spinner">
+            <div class="spinner-border text-success"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    if (!requireAuth()) {
+        throw new Error('Authentication required');
+    }
+
+    async function loadTripHistory() {
+        try {
+            const data = await API.trips.getHistory();
+            const trips = data.trips;
+
+            if (trips.length === 0) {
+                document.getElementById('historyContent').innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox text-muted" style="font-size: 4rem;"></i>
+                        <h4 class="mt-3 text-muted">No trips recorded yet</h4>
+                        <p class="text-muted">Start your first trip to see it here</p>
+                        <a href="/trip/dashboard" class="btn btn-success mt-3">Record Trip</a>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-4">
+                                        <h4 class="text-success">${trips.length}</h4>
+                                        <div class="small text-muted">Total Trips</div>
+                                    </div>
+                                    <div class="col-4">
+                                        <h4 class="text-success">${calculateTotalDistance(trips)}</h4>
+                                        <div class="small text-muted">Total Distance</div>
+                                    </div>
+                                    <div class="col-4">
+                                        <h4 class="text-success">${calculateTotalTime(trips)}</h4>
+                                        <div class="small text-muted">Total Time</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="list-group">
+            `;
+
+            trips.forEach(trip => {
+                html += `
+                    <a href="/trip/detail/${trip.tripId}" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <div>
+                                <h5 class="mb-1">${formatDateTime(trip.startTime)}</h5>
+                                <div class="d-flex gap-3 mt-2">
+                                    ${trip.totalDistance ? `
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-map"></i> ${formatDistance(trip.totalDistance)}
+                                        </span>
+                                    ` : ''}
+                                    ${trip.duration ? `
+                                        <span class="badge bg-primary">
+                                            <i class="bi bi-clock"></i> ${formatDuration(trip.duration)}
+                                        </span>
+                                    ` : ''}
+                                    ${trip.averageSpeed ? `
+                                        <span class="badge bg-info">
+                                            <i class="bi bi-speedometer"></i> ${formatSpeed(trip.averageSpeed)}
+                                        </span>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            <span class="text-muted"><i class="bi bi-chevron-right"></i></span>
+                        </div>
+                    </a>
+                `;
+            });
+
+            html += '</div>';
+
+            document.getElementById('historyContent').innerHTML = html;
+        } catch (error) {
+            document.getElementById('historyContent').innerHTML = `
+                <div class="alert alert-danger">Failed to load trip history: ${error.message}</div>
+            `;
+        }
+    }
+
+    function calculateTotalDistance(trips) {
+        const total = trips.reduce((sum, trip) => sum + (trip.totalDistance || 0), 0);
+        return formatDistance(total);
+    }
+
+    function calculateTotalTime(trips) {
+        const total = trips.reduce((sum, trip) => sum + (trip.duration || 0), 0);
+        return formatDuration(total);
+    }
+
+    loadTripHistory();
+</script>
+{% endblock %}

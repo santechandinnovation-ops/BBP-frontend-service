@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Trip Dashboard - Best Bike Paths{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body text-center p-5">
+                    <i class="bi bi-bicycle text-success" style="font-size: 5rem;"></i>
+                    <h2 class="mt-4 mb-3">Ready to Record a Trip?</h2>
+                    <p class="text-muted mb-4">Track your bike ride with GPS and get real-time statistics</p>
+
+                    <button id="startTripBtn" class="btn btn-success btn-lg btn-lg-mobile">
+                        <i class="bi bi-play-circle"></i> Start Recording
+                    </button>
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h5 class="card-title">Recent Trips</h5>
+                    <div id="recentTrips">
+                        <div class="loading-spinner">
+                            <div class="spinner-border text-success spinner-border-sm"></div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-3">
+                        <a href="/trip/history" class="btn btn-outline-success">View All Trips</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    if (!requireAuth()) {
+        throw new Error('Authentication required');
+    }
+
+    document.getElementById('startTripBtn').addEventListener('click', async () => {
+        if (!('geolocation' in navigator)) {
+            showAlert('Geolocation is not supported by your browser', 'danger');
+            return;
+        }
+
+        const btn = document.getElementById('startTripBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
+
+        try {
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 10000
+                });
+            });
+
+            const startTime = new Date().toISOString();
+            const trip = await API.trips.create(startTime);
+
+            localStorage.setItem('activeTrip', JSON.stringify({
+                tripId: trip.tripId,
+                startTime: startTime
+            }));
+
+            window.location.href = '/trip/record';
+        } catch (error) {
+            showAlert('Failed to start trip: ' + error.message, 'danger');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-circle"></i> Start Recording';
+        }
+    });
+
+    async function loadRecentTrips() {
+        try {
+            const data = await API.trips.getHistory();
+            const trips = data.trips.slice(0, 3);
+
+            if (trips.length === 0) {
+                document.getElementById('recentTrips').innerHTML = `
+                    <p class="text-muted text-center">No trips recorded yet</p>
+                `;
+                return;
+            }
+
+            let html = '<div class="list-group">';
+            trips.forEach(trip => {
+                html += `
+                    <a href="/trip/detail/${trip.tripId}" class="list-group-item list-group-item-action">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="mb-1">${formatDateTime(trip.startTime)}</h6>
+                                <small class="text-muted">
+                                    ${trip.totalDistance ? formatDistance(trip.totalDistance) : 'N/A'} •
+                                    ${trip.duration ? formatDuration(trip.duration) : 'N/A'}
+                                </small>
+                            </div>
+                            <span class="badge bg-success align-self-center">Completed</span>
+                        </div>
+                    </a>
+                `;
+            });
+            html += '</div>';
+
+            document.getElementById('recentTrips').innerHTML = html;
+        } catch (error) {
+            document.getElementById('recentTrips').innerHTML = `
+                <p class="text-muted text-center">Failed to load recent trips</p>
+            `;
+        }
+    }
+
+    loadRecentTrips();
+</script>
+{% endblock %}

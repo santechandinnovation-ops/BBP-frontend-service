@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Profile - Best Bike Paths{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-person-circle text-success" style="font-size: 5rem;"></i>
+                    </div>
+
+                    <div id="profileContent">
+                        <div class="loading-spinner">
+                            <div class="spinner-border text-success"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-4">
+                <button id="logoutBtn" class="btn btn-outline-danger">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function loadProfile() {
+        const user = getUser();
+
+        if (!user) {
+            try {
+                const profile = await API.users.getProfile();
+                setUser(profile);
+                displayProfile(profile);
+            } catch (error) {
+                document.getElementById('profileContent').innerHTML = `
+                    <div class="alert alert-danger">Failed to load profile: ${error.message}</div>
+                `;
+            }
+        } else {
+            displayProfile(user);
+        }
+    }
+
+    function displayProfile(user) {
+        let html = `
+            <div class="mb-3">
+                <label class="form-label text-muted">Username</label>
+                <div class="h5">${user.username}</div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label text-muted">Email</label>
+                <div class="h5">${user.email}</div>
+            </div>
+
+            ${user.registrationDate ? `
+                <div class="mb-3">
+                    <label class="form-label text-muted">Member Since</label>
+                    <div>${formatDateTime(user.registrationDate)}</div>
+                </div>
+            ` : ''}
+
+            ${user.lastLogin ? `
+                <div class="mb-3">
+                    <label class="form-label text-muted">Last Login</label>
+                    <div>${formatDateTime(user.lastLogin)}</div>
+                </div>
+            ` : ''}
+        `;
+
+        document.getElementById('profileContent').innerHTML = html;
+    }
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('logoutBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Logging out...';
+
+        try {
+            await API.auth.logout();
+        } catch (error) {
+            console.error('Logout API error:', error);
+        }
+
+        removeToken();
+        showAlert('Logged out successfully', 'success');
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 500);
+    });
+
+    if (!requireAuth()) {
+        throw new Error('Authentication required');
+    }
+
+    loadProfile();
+</script>
+{% endblock %}

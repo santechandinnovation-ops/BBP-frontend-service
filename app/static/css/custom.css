@@ -1,0 +1,137 @@
+body {
+    padding-bottom: 70px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.content-wrapper {
+    min-height: calc(100vh - 70px);
+}
+
+.navbar.fixed-bottom {
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+}
+
+.navbar .nav-link {
+    color: #6c757d;
+    padding: 0.5rem;
+    transition: color 0.2s;
+}
+
+.navbar .nav-link.active {
+    color: #28a745;
+}
+
+.navbar .nav-link:hover {
+    color: #28a745;
+}
+
+.map-container {
+    height: 60vh;
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.btn-lg-mobile {
+    font-size: 18px;
+    padding: 14px 24px;
+    border-radius: 8px;
+}
+
+.card {
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border: none;
+}
+
+.form-control, .form-select {
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.badge-status-optimal {
+    background-color: #28a745;
+}
+
+.badge-status-medium {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.badge-status-sufficient {
+    background-color: #fd7e14;
+}
+
+.badge-status-maintenance {
+    background-color: #dc3545;
+}
+
+.loading-spinner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+}
+
+.alert-floating {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    min-width: 300px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+@media (max-width: 768px) {
+    .map-container {
+        height: 50vh;
+    }
+
+    .btn-lg-mobile {
+        font-size: 16px;
+        padding: 12px 20px;
+    }
+}
+
+.leaflet-container {
+    font-family: inherit;
+}
+
+.trip-stat-card {
+    text-align: center;
+    padding: 1.5rem;
+}
+
+.trip-stat-value {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #28a745;
+}
+
+.trip-stat-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    text-transform: uppercase;
+}
+
+.segment-item {
+    border-left: 4px solid #dee2e6;
+    padding-left: 1rem;
+    margin-bottom: 1rem;
+}
+
+.segment-item.status-optimal {
+    border-left-color: #28a745;
+}
+
+.segment-item.status-medium {
+    border-left-color: #ffc107;
+}
+
+.segment-item.status-sufficient {
+    border-left-color: #fd7e14;
+}
+
+.segment-item.status-maintenance {
+    border-left-color: #dc3545;
+}

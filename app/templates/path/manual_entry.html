@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+
+{% block title %}Create Path - Best Bike Paths{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-3">
+    <h2 class="mb-4">Create Manual Path</h2>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Step 1: Draw Path on Map</h5>
+                    <p class="text-muted small">Click on the map to add points. Right-click to undo last point.</p>
+                    <div id="mapContainer" class="map-container"></div>
+                    <div class="mt-3">
+                        <button id="undoPointBtn" class="btn btn-warning btn-sm" disabled>
+                            <i class="bi bi-arrow-counterclockwise"></i> Undo Last Point
+                        </button>
+                        <button id="clearPathBtn" class="btn btn-danger btn-sm" disabled>
+                            <i class="bi bi-trash"></i> Clear Path
+                        </button>
+                        <button id="finishDrawingBtn" class="btn btn-success btn-sm" disabled>
+                            <i class="bi bi-check"></i> Finish Drawing
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card" id="pathInfoCard" style="display: none;">
+                <div class="card-body">
+                    <h5 class="card-title">Path Information</h5>
+                    <div class="mb-3">
+                        <label class="form-label">Name (Optional)</label>
+                        <input type="text" class="form-control" id="pathName" placeholder="e.g., Via Milano - Piazza Duomo">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description (Optional)</label>
+                        <textarea class="form-control" id="pathDescription" rows="3" placeholder="Description..."></textarea>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="publishable">
+                        <label class="form-check-label" for="publishable">
+                            Make this path public
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="segmentsSection" style="display: none;">
+        <div class="card mt-3">
+            <div class="card-body">
+                <h5 class="card-title">Step 2: Create Segments</h5>
+                <p class="text-muted small">Click on the path to split it into segments. Each segment needs a status.</p>
+                <div id="segmentsList"></div>
+                <button id="addSegmentBtn" class="btn btn-primary mt-3">
+                    <i class="bi bi-plus"></i> Split at Point
+                </button>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <h5 class="card-title">Step 3: Add Obstacles (Optional)</h5>
+                <div id="obstaclesList"></div>
+                <button id="addObstacleBtn" class="btn btn-warning">
+                    <i class="bi bi-exclamation-triangle"></i> Add Obstacle
+                </button>
+            </div>
+        </div>
+
+        <div class="text-center mt-4 mb-5">
+            <button id="savePathBtn" class="btn btn-success btn-lg">
+                <i class="bi bi-save"></i> Save Path
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="obstacleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Obstacle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Click on the map to place the obstacle</p>
+                <div class="mb-3">
+                    <label class="form-label">Type</label>
+                    <select class="form-select" id="obstacleType">
+                        <option value="POTHOLE">Pothole</option>
+                        <option value="ROUGH_SURFACE">Rough Surface</option>
+                        <option value="DEBRIS">Debris</option>
+                        <option value="CONSTRUCTION">Construction</option>
+                        <option value="OTHER">Other</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Severity</label>
+                    <select class="form-select" id="obstacleSeverity">
+                        <option value="MINOR">Minor</option>
+                        <option value="MODERATE">Moderate</option>
+                        <option value="SEVERE">Severe</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description (Optional)</label>
+                    <input type="text" class="form-control" id="obstacleDescription">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveObstacleBtn">Add Obstacle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    if (!requireAuth()) {
+        throw new Error('Authentication required');
+    }
+
+    let map, pathPolyline;
+    let pathPoints = [];
+    let segments = [];
+    let obstacles = [];
+    let splitPoints = [];
+    let isAddingObstacle = false;
+    let obstacleModal;
+
+    function initMap() {
+        map = L.map('mapContainer').setView([45.4642, 9.1900], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        map.on('click', handleMapClick);
+        map.on('contextmenu', () => undoLastPoint());
+    }
+
+    function handleMapClick(e) {
+        if (isAddingObstacle) {
+            placeObstacle(e.latlng.lat, e.latlng.lng);
+            return;
+        }
+
+        if (segments.length > 0) {
+            return;
+        }
+
+        pathPoints.push([e.latlng.lat, e.latlng.lng]);
+        updatePath();
+        updateButtons();
+    }
+
+    function updatePath() {
+        if (pathPolyline) {
+            map.removeLayer(pathPolyline);
+        }
+
+        if (pathPoints.length > 0) {
+            pathPolyline = L.polyline(pathPoints, {
+                color: '#007bff',
+                weight: 5,
+                opacity: 0.7
+            }).addTo(map);
+        }
+    }
+
+    function undoLastPoint() {
+        if (pathPoints.length > 0 && segments.length === 0) {
+            pathPoints.pop();
+            updatePath();
+            updateButtons();
+        }
+    }
+
+    function clearPath() {
+        pathPoints = [];
+        segments = [];
+        splitPoints = [];
+        updatePath();
+        updateButtons();
+        document.getElementById('pathInfoCard').style.display = 'none';
+        document.getElementById('segmentsSection').style.display = 'none';
+    }
+
+    function updateButtons() {
+        document.getElementById('undoPointBtn').disabled = pathPoints.length === 0;
+        document.getElementById('clearPathBtn').disabled = pathPoints.length === 0;
+        document.getElementById('finishDrawingBtn').disabled = pathPoints.length < 2;
+    }
+
+    document.getElementById('undoPointBtn').addEventListener('click', undoLastPoint);
+    document.getElementById('clearPathBtn').addEventListener('click', clearPath);
+
+    document.getElementById('finishDrawingBtn').addEventListener('click', () => {
+        if (pathPoints.length < 2) {
+            showAlert('Path must have at least 2 points', 'warning');
+            return;
+        }
+
+        document.getElementById('pathInfoCard').style.display = 'block';
+        document.getElementById('segmentsSection').style.display = 'block';
+
+        createDefaultSegments();
+        showAlert('Path drawing completed! Now create segments.', 'success');
+    });
+
+    function createDefaultSegments() {
+        segments = [{
+            startIndex: 0,
+            endIndex: pathPoints.length - 1,
+            status: 'OPTIMAL',
+            streetName: ''
+        }];
+        renderSegments();
+    }
+
+    function renderSegments() {
+        let html = '';
+        segments.forEach((segment, index) => {
+            html += `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <h6>Segment ${index + 1}</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <input type="text" class="form-control form-control-sm" placeholder="Street name (optional)"
+                                    value="${segment.streetName}" onchange="updateSegmentName(${index}, this.value)">
+                            </div>
+                            <div class="col-md-6">
+                                <select class="form-select form-select-sm" onchange="updateSegmentStatus(${index}, this.value)">
+                                    <option value="OPTIMAL" ${segment.status === 'OPTIMAL' ? 'selected' : ''}>Optimal</option>
+                                    <option value="MEDIUM" ${segment.status === 'MEDIUM' ? 'selected' : ''}>Medium</option>
+                                    <option value="SUFFICIENT" ${segment.status === 'SUFFICIENT' ? 'selected' : ''}>Sufficient</option>
+                                    <option value="REQUIRES_MAINTENANCE" ${segment.status === 'REQUIRES_MAINTENANCE' ? 'selected' : ''}>Requires Maintenance</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        document.getElementById('segmentsList').innerHTML = html;
+    }
+
+    function updateSegmentName(index, name) {
+        segments[index].streetName = name;
+    }
+
+    function updateSegmentStatus(index, status) {
+        segments[index].status = status;
+    }
+
+    document.getElementById('addSegmentBtn').addEventListener('click', () => {
+        const pointIndex = prompt(`Enter point index to split (0-${pathPoints.length - 1}):`);
+        if (pointIndex !== null) {
+            const idx = parseInt(pointIndex);
+            if (idx > 0 && idx < pathPoints.length - 1) {
+                const newSegments = [];
+                segments.forEach(seg => {
+                    if (idx > seg.startIndex && idx < seg.endIndex) {
+                        newSegments.push({
+                            startIndex: seg.startIndex,
+                            endIndex: idx,
+                            status: seg.status,
+                            streetName: seg.streetName
+                        });
+                        newSegments.push({
+                            startIndex: idx,
+                            endIndex: seg.endIndex,
+                            status: 'OPTIMAL',
+                            streetName: ''
+                        });
+                    } else {
+                        newSegments.push(seg);
+                    }
+                });
+                segments = newSegments;
+                renderSegments();
+            }
+        }
+    });
+
+    document.getElementById('addObstacleBtn').addEventListener('click', () => {
+        isAddingObstacle = true;
+        obstacleModal = new bootstrap.Modal(document.getElementById('obstacleModal'));
+        obstacleModal.show();
+        showAlert('Click on the map to place the obstacle', 'info');
+    });
+
+    function placeObstacle(lat, lng) {
+        if (!isAddingObstacle) return;
+
+        const type = document.getElementById('obstacleType').value;
+        const severity = document.getElementById('obstacleSeverity').value;
+        const description = document.getElementById('obstacleDescription').value;
+
+        obstacles.push({
+            latitude: lat,
+            longitude: lng,
+            type: type,
+            severity: severity,
+            description: description || null
+        });
+
+        L.marker([lat, lng], {
+            icon: L.divIcon({
+                className: 'obstacle-marker',
+                html: '<i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 24px;"></i>',
+                iconSize: [24, 24]
+            })
+        }).addTo(map);
+
+        renderObstacles();
+        isAddingObstacle = false;
+        obstacleModal.hide();
+        document.getElementById('obstacleDescription').value = '';
+        showAlert('Obstacle added successfully', 'success');
+    }
+
+    document.getElementById('saveObstacleBtn').addEventListener('click', () => {
+        if (!isAddingObstacle) {
+            showAlert('Please click on the map to place the obstacle', 'warning');
+        }
+    });
+
+    function renderObstacles() {
+        let html = '';
+        obstacles.forEach((obs, index) => {
+            html += `
+                <div class="alert alert-warning mb-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>${obs.type}</strong> (${obs.severity})
+                        ${obs.description ? `<br><small>${obs.description}</small>` : ''}
+                    </div>
+                    <button class="btn btn-sm btn-danger" onclick="removeObstacle(${index})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+        });
+        document.getElementById('obstaclesList').innerHTML = html || '<p class="text-muted">No obstacles added</p>';
+    }
+
+    function removeObstacle(index) {
+        obstacles.splice(index, 1);
+        renderObstacles();
+    }
+
+    document.getElementById('savePathBtn').addEventListener('click', async () => {
+        if (segments.length === 0) {
+            showAlert('Please create at least one segment', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('savePathBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+
+        const pathData = {
+            name: document.getElementById('pathName').value || null,
+            description: document.getElementById('pathDescription').value || null,
+            publishable: document.getElementById('publishable').checked,
+            segments: segments.map((seg, index) => ({
+                streetName: seg.streetName || null,
+                status: seg.status,
+                startLatitude: pathPoints[seg.startIndex][0],
+                startLongitude: pathPoints[seg.startIndex][1],
+                endLatitude: pathPoints[seg.endIndex][0],
+                endLongitude: pathPoints[seg.endIndex][1],
+                order: index
+            })),
+            obstacles: obstacles
+        };
+
+        try {
+            const response = await API.paths.createManual(pathData);
+            showAlert('Path saved successfully!', 'success');
+            setTimeout(() => {
+                window.location.href = '/search';
+            }, 1500);
+        } catch (error) {
+            showAlert('Failed to save path: ' + error.message, 'danger');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-save"></i> Save Path';
+        }
+    });
+
+    initMap();
+</script>
+{% endblock %}

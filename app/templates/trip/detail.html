@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Trip Details - Best Bike Paths{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Trip Details</h2>
+        <a href="/trip/history" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back
+        </a>
+    </div>
+
+    <div id="tripContent">
+        <div class="loading-spinner">
+            <div class="spinner-border text-success"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const tripId = '{{ trip_id }}';
+
+    async function loadTripDetail() {
+        try {
+            const trip = await API.trips.getDetail(tripId);
+
+            let html = `
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-3">
+                        <div class="card trip-stat-card">
+                            <div class="trip-stat-value">${(trip.totalDistance / 1000).toFixed(2)}</div>
+                            <div class="trip-stat-label">Distance (km)</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="card trip-stat-card">
+                            <div class="trip-stat-value">${formatDuration(trip.duration)}</div>
+                            <div class="trip-stat-label">Duration</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="card trip-stat-card">
+                            <div class="trip-stat-value">${(trip.averageSpeed * 3.6).toFixed(1)}</div>
+                            <div class="trip-stat-label">Avg Speed (km/h)</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="card trip-stat-card">
+                            <div class="trip-stat-value">${(trip.maxSpeed * 3.6).toFixed(1)}</div>
+                            <div class="trip-stat-label">Max Speed (km/h)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="map-container mb-3" id="mapContainer"></div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">Trip Information</h5>
+                                <table class="table table-sm">
+                                    <tr>
+                                        <td><strong>Start Time:</strong></td>
+                                        <td>${formatDateTime(trip.startTime)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>End Time:</strong></td>
+                                        <td>${formatDateTime(trip.endTime)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>GPS Points:</strong></td>
+                                        <td>${trip.coordinates.length}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    ${trip.weather ? `
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title"><i class="bi bi-cloud-sun"></i> Weather</h5>
+                                    <table class="table table-sm">
+                                        <tr>
+                                            <td><strong>Temperature:</strong></td>
+                                            <td>${trip.weather.temperature}°C</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Conditions:</strong></td>
+                                            <td>${trip.weather.conditions}</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Wind:</strong></td>
+                                            <td>${trip.weather.windSpeed} km/h ${trip.weather.windDirection || ''}</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            document.getElementById('tripContent').innerHTML = html;
+
+            const map = L.map('mapContainer').setView([trip.coordinates[0].latitude, trip.coordinates[0].longitude], 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            const pathCoords = trip.coordinates.map(c => [c.latitude, c.longitude]);
+            L.polyline(pathCoords, {
+                color: '#28a745',
+                weight: 4,
+                opacity: 0.7
+            }).addTo(map);
+
+            L.marker([trip.coordinates[0].latitude, trip.coordinates[0].longitude], {
+                icon: L.divIcon({
+                    className: 'start-marker',
+                    html: '<i class="bi bi-geo-alt-fill text-success" style="font-size: 30px;"></i>',
+                    iconSize: [30, 30]
+                })
+            }).addTo(map).bindPopup('Start');
+
+            const lastCoord = trip.coordinates[trip.coordinates.length - 1];
+            L.marker([lastCoord.latitude, lastCoord.longitude], {
+                icon: L.divIcon({
+                    className: 'end-marker',
+                    html: '<i class="bi bi-flag-fill text-danger" style="font-size: 30px;"></i>',
+                    iconSize: [30, 30]
+                })
+            }).addTo(map).bindPopup('End');
+
+            map.fitBounds(L.polyline(pathCoords).getBounds(), { padding: [50, 50] });
+        } catch (error) {
+            document.getElementById('tripContent').innerHTML = `
+                <div class="alert alert-danger">Failed to load trip details: ${error.message}</div>
+            `;
+        }
+    }
+
+    loadTripDetail();
+</script>
+{% endblock %}

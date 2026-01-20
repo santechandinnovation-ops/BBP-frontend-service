@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Search Routes - Best Bike Paths{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-3">
+    <h2 class="mb-4">Search Bike Routes</h2>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form id="searchForm">
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label">Origin</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="originLat" placeholder="Latitude" step="0.0001" required>
+                            <input type="number" class="form-control" id="originLon" placeholder="Longitude" step="0.0001" required>
+                            <button type="button" class="btn btn-outline-secondary" id="useCurrentLocation">
+                                <i class="bi bi-geo-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="col-md-5">
+                        <label class="form-label">Destination</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="destLat" placeholder="Latitude" step="0.0001" required>
+                            <input type="number" class="form-control" id="destLon" placeholder="Longitude" step="0.0001" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-search"></i> Search
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="mapContainer" class="map-container mb-3"></div>
+
+    <div id="resultsContainer"></div>
+</div>
+
+<script>
+    let map;
+    let markersLayer;
+
+    function initMap() {
+        map = L.map('mapContainer').setView([45.4642, 9.1900], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        markersLayer = L.layerGroup().addTo(map);
+    }
+
+    document.getElementById('useCurrentLocation').addEventListener('click', () => {
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                document.getElementById('originLat').value = position.coords.latitude.toFixed(4);
+                document.getElementById('originLon').value = position.coords.longitude.toFixed(4);
+                showAlert('Current location set', 'success');
+            }, (error) => {
+                showAlert('Could not get current location', 'danger');
+            });
+        } else {
+            showAlert('Geolocation not supported', 'danger');
+        }
+    });
+
+    document.getElementById('searchForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const originLat = parseFloat(document.getElementById('originLat').value);
+        const originLon = parseFloat(document.getElementById('originLon').value);
+        const destLat = parseFloat(document.getElementById('destLat').value);
+        const destLon = parseFloat(document.getElementById('destLon').value);
+
+        showLoading('resultsContainer');
+
+        try {
+            const data = await API.paths.search({
+                start_lat: originLat,
+                start_lon: originLon,
+                end_lat: destLat,
+                end_lon: destLon
+            });
+
+            displayRoutes(data.routes, originLat, originLon, destLat, destLon);
+        } catch (error) {
+            document.getElementById('resultsContainer').innerHTML = `
+                <div class="alert alert-danger">Failed to search routes: ${error.message}</div>
+            `;
+        }
+    });
+
+    function displayRoutes(routes, originLat, originLon, destLat, destLon) {
+        markersLayer.clearLayers();
+
+        L.marker([originLat, originLon]).addTo(markersLayer)
+            .bindPopup('Origin');
+        L.marker([destLat, destLon]).addTo(markersLayer)
+            .bindPopup('Destination');
+
+        if (routes.length === 0) {
+            document.getElementById('resultsContainer').innerHTML = `
+                <div class="alert alert-info">No routes found for this search</div>
+            `;
+            return;
+        }
+
+        let html = `<h4 class="mb-3">Found ${routes.length} route(s)</h4>`;
+
+        routes.forEach((route, index) => {
+            const polylineCoords = [];
+            route.segments.forEach(segment => {
+                polylineCoords.push([segment.startLatitude, segment.startLongitude]);
+                polylineCoords.push([segment.endLatitude, segment.endLongitude]);
+            });
+
+            const color = getStatusColor(route.segments[0]?.status || 'MEDIUM');
+            const polyline = L.polyline(polylineCoords, {
+                color: color,
+                weight: 4,
+                opacity: 0.7
+            }).addTo(markersLayer);
+
+            route.segments.forEach(segment => {
+                if (segment.obstacles && segment.obstacles.length > 0) {
+                    segment.obstacles.forEach(obstacle => {
+                        L.marker([obstacle.latitude, obstacle.longitude], {
+                            icon: L.divIcon({
+                                className: 'obstacle-marker',
+                                html: '<i class="bi bi-exclamation-triangle-fill text-danger"></i>',
+                                iconSize: [20, 20]
+                            })
+                        }).addTo(markersLayer)
+                        .bindPopup(`<strong>${obstacle.type}</strong><br>${obstacle.severity}`);
+                    });
+                }
+            });
+
+            html += `
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Route ${index + 1}</h5>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <strong>Distance:</strong> ${formatDistance(route.totalDistance)}
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Score:</strong> ${route.score.toFixed(1)}/10
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Segments:</strong> ${route.segments.length}
+                            </div>
+                            <div class="col-md-3">
+                                <a href="/search/route/${route.routeId}" class="btn btn-sm btn-outline-success">View Details</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        document.getElementById('resultsContainer').innerHTML = html;
+
+        if (routes.length > 0) {
+            map.fitBounds(markersLayer.getBounds(), { padding: [50, 50] });
+        }
+    }
+
+    initMap();
+</script>
+
+<style>
+    .obstacle-marker {
+        background: transparent;
+        border: none;
+        font-size: 20px;
+    }
+</style>
+{% endblock %}
