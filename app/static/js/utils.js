@@ -1,6 +1,7 @@
 const API_BASE_URL = window.location.hostname === 'localhost'
     ? 'http://localhost:8080'
-    : window.location.origin.replace('frontend', 'gateway');
+    : 'https://bbp-api-gateway-service-production.up.railway.app';
+
 
 function getToken() {
     return localStorage.getItem('jwt_token');
