@@ -17,7 +17,9 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_scripts %}
 <script>
     if (!requireAuth()) {
         throw new Error('Authentication required');

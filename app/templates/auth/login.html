@@ -18,7 +18,7 @@
 
                         <div class="mb-3">
                             <label for="password" class="form-label">Password</label>
-                            <input type="password" class="form-control" id="password" required>
+                            <input type="password" class="form-control" id="password" autocomplete="current-password" required>
                         </div>
 
                         <button type="submit" class="btn btn-success w-100 btn-lg-mobile">
@@ -35,7 +35,9 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_scripts %}
 <script>
     if (isAuthenticated()) {
         window.location.href = '/trip/dashboard';

@@ -24,13 +24,13 @@
 
                         <div class="mb-3">
                             <label for="password" class="form-label">Password</label>
-                            <input type="password" class="form-control" id="password" minlength="8" required>
+                            <input type="password" class="form-control" id="password" minlength="8" autocomplete="new-password" required>
                             <div class="form-text">At least 8 characters, 1 uppercase letter, 1 number</div>
                         </div>
 
                         <div class="mb-3">
                             <label for="confirmPassword" class="form-label">Confirm Password</label>
-                            <input type="password" class="form-control" id="confirmPassword" required>
+                            <input type="password" class="form-control" id="confirmPassword" autocomplete="new-password" required>
                         </div>
 
                         <button type="submit" class="btn btn-success w-100 btn-lg-mobile">
@@ -47,7 +47,9 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_scripts %}
 <script>
     if (isAuthenticated()) {
         window.location.href = '/trip/dashboard';

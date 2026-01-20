@@ -28,8 +28,14 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_scripts %}
 <script>
+    if (!requireAuth()) {
+        throw new Error('Authentication required');
+    }
+
     async function loadProfile() {
         const user = getUser();
 
@@ -95,10 +101,6 @@
             window.location.href = '/';
         }, 500);
     });
-
-    if (!requireAuth()) {
-        throw new Error('Authentication required');
-    }
 
     loadProfile();
 </script>
