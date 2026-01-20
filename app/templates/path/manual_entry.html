@@ -881,6 +881,8 @@
                 const startPoint = routePoints[0];
                 const endPoint = routePoints[routePoints.length - 1];
                 
+                console.log(`Segment ${index}: routePoints count = ${routePoints.length}`);
+                
                 return {
                     streetName: seg.streetName || null,
                     status: seg.status,
@@ -894,8 +896,13 @@
                     distance: seg.distance || null
                 };
             }),
-            obstacles: obstacles
+            obstacles: obstacles.map(obs => {
+                console.log(`Obstacle at: (${obs.latitude}, ${obs.longitude})`);
+                return obs;
+            })
         };
+
+        console.log('Path data to send:', JSON.stringify(pathData, null, 2));
 
         try {
             const response = await API.paths.createManual(pathData);
