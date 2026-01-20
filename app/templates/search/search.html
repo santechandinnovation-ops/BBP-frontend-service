@@ -97,6 +97,26 @@
         border: none;
         font-size: 20px;
     }
+    .text-orange {
+        color: #fd7e14 !important;
+    }
+    .route-card {
+        transition: all 0.2s ease;
+    }
+    .route-card:hover {
+        background-color: #f8f9fa;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .route-card.selected {
+        transform: scale(1.02);
+    }
+    .show-route-btn {
+        transition: all 0.2s ease;
+    }
+    .show-route-btn:hover {
+        transform: scale(1.05);
+    }
 </style>
 {% endblock %}
 
@@ -470,9 +490,15 @@
         }
     }
 
-    // Display routes
+    // Store found routes for click-to-display
+    let foundRoutes = [];
+    let selectedRouteIndex = null;
+
+    // Display routes as a list (without showing on map initially)
     function displayRoutes(routes) {
         routesLayer.clearLayers();
+        foundRoutes = routes || [];
+        selectedRouteIndex = null;
 
         if (!routes || routes.length === 0) {
             document.getElementById('resultsContainer').innerHTML = `
@@ -484,55 +510,58 @@
             return;
         }
 
-        let html = `<h4 class="mb-3"><i class="bi bi-signpost-2 me-2"></i>Found ${routes.length} route(s)</h4>`;
+        const colors = ['#0d6efd', '#198754', '#6f42c1', '#fd7e14'];
+
+        let html = `
+            <h4 class="mb-3"><i class="bi bi-signpost-2 me-2"></i>Found ${routes.length} route(s)</h4>
+            <p class="text-muted small mb-3">
+                <i class="bi bi-hand-index me-2"></i>Click on a route to view it on the map
+            </p>
+        `;
 
         routes.forEach((route, index) => {
-            // Draw route on map
-            const polylineCoords = [];
-            route.segments.forEach(segment => {
-                polylineCoords.push([segment.startLatitude, segment.startLongitude]);
-                polylineCoords.push([segment.endLatitude, segment.endLongitude]);
-            });
-
-            const colors = ['#0d6efd', '#198754', '#6f42c1', '#fd7e14'];
             const color = colors[index % colors.length];
             
-            L.polyline(polylineCoords, {
-                color: color,
-                weight: 5,
-                opacity: 0.8
-            }).addTo(routesLayer);
-
-            // Draw obstacles
-            route.segments.forEach(segment => {
-                if (segment.obstacles && segment.obstacles.length > 0) {
-                    segment.obstacles.forEach(obstacle => {
-                        L.marker([obstacle.latitude, obstacle.longitude], {
-                            icon: L.divIcon({
-                                className: 'obstacle-marker',
-                                html: `<span style="font-size: 20px;">${getObstacleIcon(obstacle.type)}</span>`,
-                                iconSize: [20, 20],
-                                iconAnchor: [10, 10]
-                            })
-                        }).addTo(routesLayer)
-                        .bindPopup(`<strong>${obstacle.type}</strong><br>Severity: ${obstacle.severity}`);
-                    });
-                }
-            });
-
             // Calculate total obstacles
             const totalObstacles = route.segments.reduce((acc, seg) => acc + (seg.obstacles?.length || 0), 0);
+            
+            // Calculate average status
+            const statusCounts = { OPTIMAL: 0, MEDIUM: 0, SUFFICIENT: 0, REQUIRES_MAINTENANCE: 0 };
+            route.segments.forEach(seg => {
+                if (seg.status && statusCounts.hasOwnProperty(seg.status)) {
+                    statusCounts[seg.status]++;
+                }
+            });
+            const dominantStatus = Object.entries(statusCounts).sort((a, b) => b[1] - a[1])[0][0];
+            const statusColors = {
+                'OPTIMAL': '#28a745',
+                'MEDIUM': '#ffc107', 
+                'SUFFICIENT': '#fd7e14',
+                'REQUIRES_MAINTENANCE': '#dc3545'
+            };
+            const statusLabels = {
+                'OPTIMAL': 'Excellent',
+                'MEDIUM': 'Good', 
+                'SUFFICIENT': 'Fair',
+                'REQUIRES_MAINTENANCE': 'Poor'
+            };
 
             html += `
-                <div class="card mb-3" style="border-left: 4px solid ${color};">
+                <div class="card mb-3 route-card" data-route-index="${index}" style="border-left: 4px solid ${color}; cursor: pointer; transition: all 0.2s ease;">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start">
                             <h5 class="card-title mb-2">
                                 <span class="badge" style="background-color: ${color};">Route ${index + 1}</span>
+                                ${index === 0 ? '<span class="badge bg-success ms-2"><i class="bi bi-star-fill me-1"></i>Best</span>' : ''}
                             </h5>
-                            <a href="/search/route/${route.routeId}" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-eye me-1"></i>View Details
-                            </a>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-primary show-route-btn" data-route-index="${index}" title="Show on map">
+                                    <i class="bi bi-map me-1"></i>Show
+                                </button>
+                                <a href="/search/route/${route.routeId}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye me-1"></i>Details
+                                </a>
+                            </div>
                         </div>
                         <div class="row g-2 mt-2">
                             <div class="col-6 col-md-3">
@@ -544,13 +573,18 @@
                                 <strong class="${route.score >= 7 ? 'text-success' : route.score >= 4 ? 'text-warning' : 'text-danger'}">${route.score.toFixed(1)}/10</strong>
                             </div>
                             <div class="col-6 col-md-3">
-                                <div class="text-muted small">Segments</div>
-                                <strong>${route.segments.length}</strong>
+                                <div class="text-muted small">Condition</div>
+                                <strong style="color: ${statusColors[dominantStatus]}">${statusLabels[dominantStatus]}</strong>
                             </div>
                             <div class="col-6 col-md-3">
                                 <div class="text-muted small">Obstacles</div>
-                                <strong class="${totalObstacles > 0 ? 'text-warning' : ''}">${totalObstacles}</strong>
+                                <strong class="${totalObstacles > 0 ? 'text-warning' : 'text-success'}">${totalObstacles > 0 ? totalObstacles : 'None'}</strong>
                             </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-signpost-split me-1"></i>${route.segments.length} segments
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -559,11 +593,132 @@
 
         document.getElementById('resultsContainer').innerHTML = html;
 
-        // Fit map to show all routes
+        // Add click handlers to route cards
+        document.querySelectorAll('.route-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                // Don't trigger if clicking on a button or link
+                if (e.target.closest('a') || e.target.closest('.show-route-btn')) return;
+                
+                const routeIndex = parseInt(this.dataset.routeIndex);
+                showRouteOnMap(routeIndex);
+            });
+        });
+
+        // Add click handlers to "Show" buttons
+        document.querySelectorAll('.show-route-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const routeIndex = parseInt(this.dataset.routeIndex);
+                showRouteOnMap(routeIndex);
+            });
+        });
+    }
+
+    // Show a specific route on the map
+    function showRouteOnMap(routeIndex) {
+        if (routeIndex < 0 || routeIndex >= foundRoutes.length) return;
+
+        const route = foundRoutes[routeIndex];
+        const colors = ['#0d6efd', '#198754', '#6f42c1', '#fd7e14'];
+        const color = colors[routeIndex % colors.length];
+
+        // Clear previous route display
+        routesLayer.clearLayers();
+        selectedRouteIndex = routeIndex;
+
+        // Update card styling to show selection
+        document.querySelectorAll('.route-card').forEach((card, idx) => {
+            if (idx === routeIndex) {
+                card.style.boxShadow = '0 0 0 3px ' + color;
+                card.style.transform = 'scale(1.02)';
+            } else {
+                card.style.boxShadow = 'none';
+                card.style.transform = 'scale(1)';
+            }
+        });
+
+        // Draw route segments with status colors
+        const statusColors = {
+            'OPTIMAL': '#28a745',
+            'MEDIUM': '#ffc107', 
+            'SUFFICIENT': '#fd7e14',
+            'REQUIRES_MAINTENANCE': '#dc3545'
+        };
+
+        route.segments.forEach(segment => {
+            const segmentColor = statusColors[segment.status] || color;
+            
+            // Use routeGeometry if available, otherwise use start/end points
+            let coords;
+            if (segment.routeGeometry && segment.routeGeometry.length > 0) {
+                coords = segment.routeGeometry.map(c => [c[1], c[0]]); // Convert [lon, lat] to [lat, lon]
+            } else {
+                coords = [
+                    [segment.startLatitude, segment.startLongitude],
+                    [segment.endLatitude, segment.endLongitude]
+                ];
+            }
+
+            L.polyline(coords, {
+                color: segmentColor,
+                weight: 6,
+                opacity: 0.85
+            }).addTo(routesLayer)
+            .bindPopup(`
+                <strong>Segment</strong><br>
+                Status: ${segment.status}<br>
+                Distance: ${formatDistance(segment.distance || 0)}
+            `);
+
+            // Draw obstacles for this segment
+            if (segment.obstacles && segment.obstacles.length > 0) {
+                segment.obstacles.forEach(obstacle => {
+                    L.marker([obstacle.latitude, obstacle.longitude], {
+                        icon: L.divIcon({
+                            className: 'obstacle-marker',
+                            html: `<span style="font-size: 24px; filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));">${getObstacleIcon(obstacle.type)}</span>`,
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 12]
+                        })
+                    }).addTo(routesLayer)
+                    .bindPopup(`
+                        <strong>${getObstacleLabel(obstacle.type)}</strong><br>
+                        Severity: <span class="${getSeverityClass(obstacle.severity)}">${obstacle.severity}</span>
+                    `);
+                });
+            }
+        });
+
+        // Fit map to show the route
         if (routesLayer.getLayers().length > 0) {
             const allBounds = L.featureGroup([markersLayer, routesLayer]).getBounds();
             map.fitBounds(allBounds, { padding: [50, 50] });
         }
+
+        // Scroll to map
+        document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Get obstacle label
+    function getObstacleLabel(type) {
+        const labels = {
+            'POTHOLE': 'Pothole',
+            'ROUGH_SURFACE': 'Rough Surface',
+            'DEBRIS': 'Debris',
+            'CONSTRUCTION': 'Construction',
+            'OTHER': 'Other Obstacle'
+        };
+        return labels[type] || type;
+    }
+
+    // Get severity CSS class
+    function getSeverityClass(severity) {
+        const classes = {
+            'MINOR': 'text-warning',
+            'MODERATE': 'text-orange',
+            'SEVERE': 'text-danger'
+        };
+        return classes[severity] || '';
     }
 
     // Get obstacle icon
