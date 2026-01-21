@@ -99,19 +99,33 @@ body {
 
 .trip-stat-card {
     text-align: center;
-    padding: 1.5rem;
+    padding: 0.75rem 0.5rem;
 }
 
 .trip-stat-value {
-    font-size: 2rem;
+    font-size: 1.5rem;
     font-weight: bold;
     color: #28a745;
+    white-space: nowrap;
 }
 
 .trip-stat-label {
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     color: #6c757d;
     text-transform: uppercase;
+}
+
+/* Larger screens */
+@media (min-width: 400px) {
+    .trip-stat-card {
+        padding: 1rem;
+    }
+    .trip-stat-value {
+        font-size: 1.75rem;
+    }
+    .trip-stat-label {
+        font-size: 0.875rem;
+    }
 }
 
 .segment-item {
