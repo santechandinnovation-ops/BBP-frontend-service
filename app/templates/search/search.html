@@ -615,7 +615,7 @@
     }
 
     // Show a specific route on the map
-    function showRouteOnMap(routeIndex) {
+    async function showRouteOnMap(routeIndex) {
         if (routeIndex < 0 || routeIndex >= foundRoutes.length) return;
 
         const route = foundRoutes[routeIndex];
@@ -645,18 +645,30 @@
             'REQUIRES_MAINTENANCE': '#dc3545'
         };
 
-        route.segments.forEach(segment => {
+        // Process all segments and get road-projected routes
+        for (const segment of route.segments) {
             const segmentColor = statusColors[segment.status] || color;
             
-            // Use routeGeometry if available, otherwise use start/end points
             let coords;
             if (segment.routeGeometry && segment.routeGeometry.length > 0) {
+                // Use pre-saved geometry if available
                 coords = segment.routeGeometry.map(c => [c[1], c[0]]); // Convert [lon, lat] to [lat, lon]
             } else {
-                coords = [
-                    [segment.startLatitude, segment.startLongitude],
-                    [segment.endLatitude, segment.endLongitude]
-                ];
+                // Fetch road-projected route from OSRM for visualization
+                const roadRoute = await getRouteOnRoad(
+                    segment.startLatitude, segment.startLongitude,
+                    segment.endLatitude, segment.endLongitude
+                );
+                
+                if (roadRoute && roadRoute.length > 0) {
+                    coords = roadRoute; // Already in [lat, lon] format
+                } else {
+                    // Fallback to straight line if OSRM fails
+                    coords = [
+                        [segment.startLatitude, segment.startLongitude],
+                        [segment.endLatitude, segment.endLongitude]
+                    ];
+                }
             }
 
             L.polyline(coords, {
@@ -687,7 +699,7 @@
                     `);
                 });
             }
-        });
+        }
 
         // Fit map to show the route
         if (routesLayer.getLayers().length > 0) {
@@ -719,6 +731,54 @@
             'SEVERE': 'text-danger'
         };
         return classes[severity] || '';
+    }
+
+    // Decode polyline from OSRM (uses Google polyline encoding)
+    function decodePolyline(encoded) {
+        let points = [];
+        let index = 0, lat = 0, lng = 0;
+
+        while (index < encoded.length) {
+            let b, shift = 0, result = 0;
+            do {
+                b = encoded.charCodeAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20);
+            let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+            lat += dlat;
+
+            shift = 0;
+            result = 0;
+            do {
+                b = encoded.charCodeAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20);
+            let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+            lng += dlng;
+
+            points.push([lat / 1e5, lng / 1e5]);
+        }
+        return points;
+    }
+
+    // Get route from OSRM that follows actual roads (for visualization only)
+    async function getRouteOnRoad(startLat, startLng, endLat, endLng) {
+        try {
+            const url = `https://router.project-osrm.org/route/v1/bike/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=polyline`;
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                return decodePolyline(data.routes[0].geometry);
+            }
+            return null;
+        } catch (error) {
+            console.error('Error fetching route from OSRM:', error);
+            return null;
+        }
     }
 
     // Get obstacle icon
