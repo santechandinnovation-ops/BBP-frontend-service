@@ -71,11 +71,11 @@
 
             trips.forEach(trip => {
                 html += `
-                    <a href="/trip/detail/${trip.tripId}" class="list-group-item list-group-item-action">
-                        <div class="d-flex w-100 justify-content-between">
-                            <div>
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between align-items-center">
+                            <a href="/trip/detail/${trip.tripId}" class="text-decoration-none flex-grow-1">
                                 <h5 class="mb-1">${formatDateTime(trip.startTime)}</h5>
-                                <div class="d-flex gap-3 mt-2">
+                                <div class="d-flex gap-2 flex-wrap mt-2">
                                     ${trip.totalDistance ? `
                                         <span class="badge bg-success">
                                             <i class="bi bi-map"></i> ${formatDistance(trip.totalDistance)}
@@ -92,10 +92,12 @@
                                         </span>
                                     ` : ''}
                                 </div>
-                            </div>
-                            <span class="text-muted"><i class="bi bi-chevron-right"></i></span>
+                            </a>
+                            <button class="btn btn-outline-danger btn-sm ms-2" onclick="deleteTrip(event, '${trip.tripId}')" title="Delete trip">
+                                <i class="bi bi-trash"></i>
+                            </button>
                         </div>
-                    </a>
+                    </div>
                 `;
             });
 
@@ -117,6 +119,24 @@
     function calculateTotalTime(trips) {
         const total = trips.reduce((sum, trip) => sum + (trip.duration || 0), 0);
         return formatDuration(total);
+    }
+
+    async function deleteTrip(event, tripId) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        if (!confirm('Are you sure you want to delete this trip? This action cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            await API.trips.delete(tripId);
+            showAlert('Trip deleted successfully', 'success');
+            // Reload the trip list
+            loadTripHistory();
+        } catch (error) {
+            showAlert('Failed to delete trip: ' + error.message, 'danger');
+        }
     }
 
     loadTripHistory();

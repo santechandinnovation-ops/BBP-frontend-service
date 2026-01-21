@@ -94,7 +94,11 @@ const API = {
 
         getHistory: () => apiRequest('/api/trips'),
 
-        getDetail: (tripId) => apiRequest(`/api/trips/${tripId}`)
+        getDetail: (tripId) => apiRequest(`/api/trips/${tripId}`),
+
+        delete: (tripId) => apiRequest(`/api/trips/${tripId}`, {
+            method: 'DELETE'
+        })
     },
 
     paths: {
