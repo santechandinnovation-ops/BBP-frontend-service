@@ -59,7 +59,8 @@
     let map, pathPolyline, currentMarker;
     let watchId = null;
     let coordinateCount = 0;
-    let pathCoordinates = [];
+    let pathCoordinates = [];  // For map display [lat, lon]
+    let allCoordinates = [];   // All coordinates with full data for batch upload
 
     function initMap() {
         map = L.map('mapContainer').setView([45.4642, 9.1900], 15);
@@ -85,23 +86,69 @@
             `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     }
 
-    async function sendCoordinate(latitude, longitude, timestamp, elevation) {
-        try {
-            await API.trips.addCoordinate(tripId, {
-                latitude,
-                longitude,
-                timestamp,
-                elevation
-            });
-            coordinateCount++;
-            document.getElementById('points').textContent = coordinateCount;
-        } catch (error) {
-            console.error('Failed to send coordinate:', error);
+    // Calculate distance between two points using Haversine formula (returns meters)
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371000; // Earth's radius in meters
+        const phi1 = lat1 * Math.PI / 180;
+        const phi2 = lat2 * Math.PI / 180;
+        const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+        const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+        
+        const a = Math.sin(deltaPhi/2) * Math.sin(deltaPhi/2) +
+                  Math.cos(phi1) * Math.cos(phi2) *
+                  Math.sin(deltaLambda/2) * Math.sin(deltaLambda/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        
+        return R * c;
+    }
+
+    // Calculate and display local statistics
+    function updateLocalStats() {
+        if (allCoordinates.length < 2) return;
+        
+        let totalDistance = 0;
+        let maxSpeed = 0;
+        
+        for (let i = 1; i < allCoordinates.length; i++) {
+            const prev = allCoordinates[i - 1];
+            const curr = allCoordinates[i];
+            
+            const segmentDist = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+            
+            // Skip GPS noise (< 1 meter)
+            if (segmentDist < 1) continue;
+            
+            totalDistance += segmentDist;
+            
+            const timeDiff = (new Date(curr.timestamp) - new Date(prev.timestamp)) / 1000;
+            if (timeDiff > 0) {
+                const speed = segmentDist / timeDiff; // m/s
+                // Filter unrealistic speeds (> 50 m/s = 180 km/h)
+                if (speed < 50) {
+                    maxSpeed = Math.max(maxSpeed, speed);
+                }
+            }
+        }
+        
+        // Update UI with local calculations
+        document.getElementById('distance').textContent = (totalDistance / 1000).toFixed(2);
+        document.getElementById('points').textContent = allCoordinates.length;
+        
+        // Calculate current speed from last two points
+        if (allCoordinates.length >= 2) {
+            const last = allCoordinates[allCoordinates.length - 1];
+            const prev = allCoordinates[allCoordinates.length - 2];
+            const timeDiff = (new Date(last.timestamp) - new Date(prev.timestamp)) / 1000;
+            if (timeDiff > 0) {
+                const dist = calculateDistance(prev.latitude, prev.longitude, last.latitude, last.longitude);
+                const currentSpeed = (dist / timeDiff) * 3.6; // Convert m/s to km/h
+                if (currentSpeed < 180) { // Filter unrealistic speeds
+                    document.getElementById('speed').textContent = currentSpeed.toFixed(1);
+                }
+            }
         }
     }
 
-    let coordinateQueue = [];
-    let sendInterval;
     let gpsErrorCount = 0;
     const MAX_GPS_ERRORS = 5;
     
@@ -140,19 +187,26 @@
                 currentMarker = L.marker([lat, lon]).addTo(map);
                 pathCoordinates.push([lat, lon]);
                 pathPolyline.setLatLngs(pathCoordinates);
+                
+                // Add initial position to coordinates
+                allCoordinates.push({
+                    latitude: lat,
+                    longitude: lon,
+                    timestamp: activeTrip.startTime,
+                    elevation: null
+                });
             }
         }
 
         // iOS-optimized geolocation options
         const geoOptions = {
             enableHighAccuracy: true,
-            maximumAge: isIOS ? 5000 : 3000,  // Allow slightly older positions on iOS
-            timeout: isIOS ? 30000 : 15000    // Longer timeout for iOS
+            maximumAge: isIOS ? 5000 : 3000,
+            timeout: isIOS ? 30000 : 15000
         };
 
         watchId = navigator.geolocation.watchPosition(
             (position) => {
-                // Reset error count on success
                 gpsErrorCount = 0;
                 
                 const lat = position.coords.latitude;
@@ -166,6 +220,7 @@
                     return;
                 }
 
+                // Update map display
                 pathCoordinates.push([lat, lon]);
                 pathPolyline.setLatLngs(pathCoordinates);
 
@@ -175,84 +230,65 @@
                 currentMarker = L.marker([lat, lon]).addTo(map);
                 map.setView([lat, lon], map.getZoom());
 
-                coordinateQueue.push({
+                // Store coordinate locally (will be sent in batch at the end)
+                allCoordinates.push({
                     latitude: lat,
                     longitude: lon,
                     timestamp: new Date().toISOString(),
                     elevation: elevation
                 });
+                
+                // Update local statistics
+                updateLocalStats();
             },
             (error) => {
                 console.error('GPS error:', error.code, error.message);
                 gpsErrorCount++;
                 
-                // Show warning but don't stop tracking unless too many errors
                 if (gpsErrorCount <= MAX_GPS_ERRORS) {
                     if (error.code === 3) {
-                        // Timeout - just log, don't show alert every time
                         console.log('GPS timeout, waiting for signal...');
                     } else {
                         showAlert(getGPSErrorMessage(error), 'warning');
                     }
                 } else {
                     showAlert('GPS connection unstable. Your trip is still being recorded when signal is available.', 'warning');
-                    gpsErrorCount = 0; // Reset to allow future warnings
+                    gpsErrorCount = 0;
                 }
             },
             geoOptions
         );
-
-        sendInterval = setInterval(async () => {
-            if (coordinateQueue.length > 0) {
-                const coord = coordinateQueue.shift();
-                await sendCoordinate(coord.latitude, coord.longitude, coord.timestamp, coord.elevation);
-            }
-        }, 5000);
-    }
-
-    let statsUpdateInterval;
-
-    async function updateStats() {
-        try {
-            const trip = await API.trips.getDetail(tripId);
-            if (trip.totalDistance) {
-                document.getElementById('distance').textContent = (trip.totalDistance / 1000).toFixed(2);
-            }
-            if (trip.averageSpeed) {
-                document.getElementById('speed').textContent = (trip.averageSpeed * 3.6).toFixed(1);
-            }
-        } catch (error) {
-            console.error('Failed to update stats:', error);
-        }
     }
 
     document.getElementById('stopTripBtn').addEventListener('click', async () => {
         const btn = document.getElementById('stopTripBtn');
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Stopping...';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving trip...';
 
+        // Stop GPS tracking
         if (watchId) {
             navigator.geolocation.clearWatch(watchId);
         }
-        if (sendInterval) {
-            clearInterval(sendInterval);
-        }
-        if (statsUpdateInterval) {
-            clearInterval(statsUpdateInterval);
-        }
-
-        while (coordinateQueue.length > 0) {
-            const coord = coordinateQueue.shift();
-            await sendCoordinate(coord.latitude, coord.longitude, coord.timestamp, coord.elevation);
-        }
 
         try {
+            // Send all coordinates in a single batch request
+            if (allCoordinates.length > 0) {
+                btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Uploading ${allCoordinates.length} points...`;
+                
+                await API.trips.addCoordinatesBatch(tripId, allCoordinates);
+                console.log(`Successfully uploaded ${allCoordinates.length} coordinates`);
+            }
+
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Calculating statistics...';
+            
+            // Complete the trip
             const endTime = new Date().toISOString();
             await API.trips.complete(tripId, endTime);
 
             localStorage.removeItem('activeTrip');
             window.location.href = `/trip/summary/${tripId}`;
         } catch (error) {
+            console.error('Error completing trip:', error);
             showAlert('Failed to complete trip: ' + error.message, 'danger');
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-stop-circle"></i> Stop Recording';
@@ -262,7 +298,7 @@
     initMap();
     startGPSTracking();
     setInterval(updateTimer, 1000);
-    statsUpdateInterval = setInterval(updateStats, 10000);
-    updateStats();
+    // Update local stats every 2 seconds
+    setInterval(updateLocalStats, 2000);
 </script>
 {% endblock %}

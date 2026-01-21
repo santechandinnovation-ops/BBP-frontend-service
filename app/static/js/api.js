@@ -82,6 +82,11 @@ const API = {
             body: JSON.stringify(coordinate)
         }),
 
+        addCoordinatesBatch: (tripId, coordinates) => apiRequest(`/api/trips/${tripId}/coordinates/batch`, {
+            method: 'POST',
+            body: JSON.stringify({ coordinates })
+        }),
+
         complete: (tripId, endTime) => apiRequest(`/api/trips/${tripId}/complete`, {
             method: 'PUT',
             body: JSON.stringify({ endTime })
