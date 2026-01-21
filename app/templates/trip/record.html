@@ -140,13 +140,6 @@
         // Update UI with local calculations
         document.getElementById('distance').textContent = (totalDistance / 1000).toFixed(2);
         document.getElementById('points').textContent = pathCoordinates.length;
-        
-        // Show sync status
-        const pending = pendingCoordinates.length;
-        const synced = sentCoordinatesCount;
-        if (pending > 0) {
-            document.getElementById('points').textContent = `${pathCoordinates.length} (${pending} pending)`;
-        }
     }
 
     // Send a batch of coordinates to the server

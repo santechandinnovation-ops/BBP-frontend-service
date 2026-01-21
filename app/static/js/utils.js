@@ -91,7 +91,14 @@ function formatSpeed(metersPerSecond) {
 }
 
 function formatDateTime(dateStr) {
-    const date = new Date(dateStr);
+    if (!dateStr) return 'N/A';
+    // Ensure UTC timestamps are correctly parsed
+    // If the timestamp doesn't end with 'Z' or timezone offset, treat it as UTC
+    let isoStr = String(dateStr);
+    if (!isoStr.endsWith('Z') && !isoStr.match(/[+-]\d{2}:\d{2}$/)) {
+        isoStr += 'Z';
+    }
+    const date = new Date(isoStr);
     return date.toLocaleString('en-US', {
         year: 'numeric',
         month: 'short',
