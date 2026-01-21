@@ -112,19 +112,22 @@
 
             document.getElementById('tripContent').innerHTML = html;
 
-            const map = L.map('mapContainer').setView([trip.coordinates[0].latitude, trip.coordinates[0].longitude], 14);
+            // Filter out GPS anomalies (points that would require unrealistic speed)
+            const filteredCoords = filterGPSAnomalies(trip.coordinates);
+            
+            const map = L.map('mapContainer').setView([filteredCoords[0].latitude, filteredCoords[0].longitude], 14);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
 
-            const pathCoords = trip.coordinates.map(c => [c.latitude, c.longitude]);
+            const pathCoords = filteredCoords.map(c => [c.latitude, c.longitude]);
             L.polyline(pathCoords, {
                 color: '#28a745',
                 weight: 4,
                 opacity: 0.7
             }).addTo(map);
 
-            L.marker([trip.coordinates[0].latitude, trip.coordinates[0].longitude], {
+            L.marker([filteredCoords[0].latitude, filteredCoords[0].longitude], {
                 icon: L.divIcon({
                     className: 'start-marker',
                     html: '<i class="bi bi-geo-alt-fill text-success" style="font-size: 30px;"></i>',
@@ -132,7 +135,7 @@
                 })
             }).addTo(map).bindPopup('Start');
 
-            const lastCoord = trip.coordinates[trip.coordinates.length - 1];
+            const lastCoord = filteredCoords[filteredCoords.length - 1];
             L.marker([lastCoord.latitude, lastCoord.longitude], {
                 icon: L.divIcon({
                     className: 'end-marker',
@@ -147,6 +150,54 @@
                 <div class="alert alert-danger">Failed to load trip details: ${error.message}</div>
             `;
         }
+    }
+
+    // Filter out GPS anomalies - points that would require unrealistic movement
+    function filterGPSAnomalies(coordinates) {
+        if (coordinates.length < 2) return coordinates;
+        
+        const MAX_SPEED_MS = 25; // 25 m/s = 90 km/h max realistic cycling speed
+        const filtered = [coordinates[0]]; // Always keep first point
+        
+        for (let i = 1; i < coordinates.length; i++) {
+            const prev = filtered[filtered.length - 1];
+            const curr = coordinates[i];
+            
+            // Calculate distance using Haversine formula
+            const R = 6371000; // Earth radius in meters
+            const lat1 = prev.latitude * Math.PI / 180;
+            const lat2 = curr.latitude * Math.PI / 180;
+            const dLat = (curr.latitude - prev.latitude) * Math.PI / 180;
+            const dLon = (curr.longitude - prev.longitude) * Math.PI / 180;
+            
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1) * Math.cos(lat2) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = R * c;
+            
+            // Calculate time difference
+            const prevTime = new Date(prev.timestamp).getTime();
+            const currTime = new Date(curr.timestamp).getTime();
+            const timeDiff = (currTime - prevTime) / 1000; // seconds
+            
+            // Skip if time difference is invalid
+            if (timeDiff <= 0) {
+                continue;
+            }
+            
+            // Calculate speed
+            const speed = distance / timeDiff;
+            
+            // Only include point if speed is realistic
+            if (speed <= MAX_SPEED_MS) {
+                filtered.push(curr);
+            } else {
+                console.log(`Filtered GPS anomaly: ${speed.toFixed(1)} m/s (${(speed*3.6).toFixed(1)} km/h)`);
+            }
+        }
+        
+        return filtered;
     }
 
     loadTripDetail();

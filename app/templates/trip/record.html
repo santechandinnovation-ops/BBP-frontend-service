@@ -164,30 +164,36 @@
         document.getElementById('points').textContent = pathCoordinates.length;
     }
 
+    // Flag to prevent concurrent batch sends
+    let isSendingBatch = false;
+
     // Send a batch of coordinates to the server
     async function sendPendingBatch() {
-        if (pendingCoordinates.length === 0) return;
+        // Prevent concurrent sends that would cause duplicates
+        if (isSendingBatch || pendingCoordinates.length === 0) return;
         
-        // Take up to BATCH_SIZE coordinates
-        const batchToSend = pendingCoordinates.slice(0, BATCH_SIZE);
+        isSendingBatch = true;
+        
+        // Take up to BATCH_SIZE coordinates and REMOVE them from pending immediately
+        const batchToSend = pendingCoordinates.splice(0, BATCH_SIZE);
         
         try {
             await API.trips.addCoordinatesBatch(tripId, batchToSend);
-            
-            // Remove sent coordinates from pending
-            pendingCoordinates = pendingCoordinates.slice(batchToSend.length);
             sentCoordinatesCount += batchToSend.length;
             
             console.log(`Sent ${batchToSend.length} coordinates. Pending: ${pendingCoordinates.length}, Total sent: ${sentCoordinatesCount}`);
         } catch (error) {
             console.error('Failed to send coordinate batch:', error);
-            // Keep coordinates in pending for retry
+            // Put coordinates back at the beginning of pending for retry
+            pendingCoordinates.unshift(...batchToSend);
+        } finally {
+            isSendingBatch = false;
         }
     }
 
     // Check if we should send a batch (called periodically and on new coordinates)
     function checkAndSendBatch() {
-        if (pendingCoordinates.length >= BATCH_SIZE) {
+        if (pendingCoordinates.length >= BATCH_SIZE && !isSendingBatch) {
             sendPendingBatch();
         }
     }
@@ -340,10 +346,16 @@
         }
 
         try {
+            // Wait for any ongoing batch send to complete
+            while (isSendingBatch) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
             // Send only remaining pending coordinates (most already sent during trip)
             if (pendingCoordinates.length > 0) {
                 btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Uploading ${pendingCoordinates.length} remaining points...`;
                 
+                // Send directly without using sendPendingBatch to avoid flag issues
                 await API.trips.addCoordinatesBatch(tripId, pendingCoordinates);
                 console.log(`Successfully uploaded ${pendingCoordinates.length} remaining coordinates`);
                 pendingCoordinates = [];
