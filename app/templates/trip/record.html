@@ -102,6 +102,27 @@
 
     let coordinateQueue = [];
     let sendInterval;
+    let gpsErrorCount = 0;
+    const MAX_GPS_ERRORS = 5;
+    
+    // Detect iOS devices
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+    // Get user-friendly GPS error message
+    function getGPSErrorMessage(error) {
+        switch(error.code) {
+            case 1:
+                return isIOS 
+                    ? 'Location access lost. Check Settings > Privacy & Security > Location Services.'
+                    : 'Location access denied. Please check browser permissions.';
+            case 2:
+                return 'GPS signal lost. Move to an open area for better reception.';
+            case 3:
+                return 'GPS signal weak. Continuing to try...';
+            default:
+                return 'GPS error occurred. Attempting to reconnect...';
+        }
+    }
 
     function startGPSTracking() {
         if (!('geolocation' in navigator)) {
@@ -109,11 +130,41 @@
             return;
         }
 
+        // Use initial position from localStorage if available
+        const activeTripStorage = localStorage.getItem('activeTrip');
+        if (activeTripStorage) {
+            const tripData = JSON.parse(activeTripStorage);
+            if (tripData.initialPosition) {
+                const { lat, lon } = tripData.initialPosition;
+                map.setView([lat, lon], 16);
+                currentMarker = L.marker([lat, lon]).addTo(map);
+                pathCoordinates.push([lat, lon]);
+                pathPolyline.setLatLngs(pathCoordinates);
+            }
+        }
+
+        // iOS-optimized geolocation options
+        const geoOptions = {
+            enableHighAccuracy: true,
+            maximumAge: isIOS ? 5000 : 3000,  // Allow slightly older positions on iOS
+            timeout: isIOS ? 30000 : 15000    // Longer timeout for iOS
+        };
+
         watchId = navigator.geolocation.watchPosition(
             (position) => {
+                // Reset error count on success
+                gpsErrorCount = 0;
+                
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
                 const elevation = position.coords.altitude;
+                const accuracy = position.coords.accuracy;
+
+                // Only add point if accuracy is reasonable (< 100 meters)
+                if (accuracy && accuracy > 100) {
+                    console.log('Skipping low accuracy position:', accuracy);
+                    return;
+                }
 
                 pathCoordinates.push([lat, lon]);
                 pathPolyline.setLatLngs(pathCoordinates);
@@ -132,14 +183,23 @@
                 });
             },
             (error) => {
-                console.error('GPS error:', error);
-                showAlert('GPS tracking error', 'warning');
+                console.error('GPS error:', error.code, error.message);
+                gpsErrorCount++;
+                
+                // Show warning but don't stop tracking unless too many errors
+                if (gpsErrorCount <= MAX_GPS_ERRORS) {
+                    if (error.code === 3) {
+                        // Timeout - just log, don't show alert every time
+                        console.log('GPS timeout, waiting for signal...');
+                    } else {
+                        showAlert(getGPSErrorMessage(error), 'warning');
+                    }
+                } else {
+                    showAlert('GPS connection unstable. Your trip is still being recorded when signal is available.', 'warning');
+                    gpsErrorCount = 0; // Reset to allow future warnings
+                }
             },
-            {
-                enableHighAccuracy: true,
-                maximumAge: 0,
-                timeout: 5000
-            }
+            geoOptions
         );
 
         sendInterval = setInterval(async () => {

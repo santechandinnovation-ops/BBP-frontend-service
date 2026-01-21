@@ -42,35 +42,114 @@
         throw new Error('Authentication required');
     }
 
+    // Detect iOS devices
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    
+    // Get user-friendly error message for geolocation errors
+    function getGeolocationErrorMessage(error) {
+        switch(error.code) {
+            case 1: // PERMISSION_DENIED
+                if (isIOS) {
+                    return 'Location access denied. Please go to Settings > Privacy & Security > Location Services, ensure it is ON, then go to Safari > Location and select "Ask" or "Allow".';
+                }
+                return 'Location access denied. Please allow location access in your browser settings and try again.';
+            case 2: // POSITION_UNAVAILABLE
+                return 'Location information unavailable. Please make sure GPS/Location Services is enabled on your device.';
+            case 3: // TIMEOUT
+                if (isIOS) {
+                    return 'Location request timed out. Please ensure Location Services is enabled in Settings and try again in an open area.';
+                }
+                return 'Location request timed out. Please try again or move to an area with better GPS signal.';
+            default:
+                return 'Unable to get your location. Please check your device settings and try again.';
+        }
+    }
+
+    // Check geolocation permissions (where supported)
+    async function checkGeolocationPermission() {
+        if ('permissions' in navigator) {
+            try {
+                const permission = await navigator.permissions.query({ name: 'geolocation' });
+                return permission.state; // 'granted', 'denied', or 'prompt'
+            } catch (e) {
+                // Safari doesn't support permissions API for geolocation
+                return 'prompt';
+            }
+        }
+        return 'prompt';
+    }
+
     document.getElementById('startTripBtn').addEventListener('click', async () => {
         if (!('geolocation' in navigator)) {
             showAlert('Geolocation is not supported by your browser', 'danger');
             return;
         }
 
+        // Check HTTPS requirement (except localhost)
+        if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            showAlert('Secure connection (HTTPS) is required for location tracking', 'danger');
+            return;
+        }
+
         const btn = document.getElementById('startTripBtn');
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Getting location...';
 
         try {
+            // Check permission status first
+            const permissionStatus = await checkGeolocationPermission();
+            
+            if (permissionStatus === 'denied') {
+                throw { 
+                    code: 1, 
+                    message: isIOS 
+                        ? 'Location access is blocked. Go to Settings > Privacy & Security > Location Services > Safari and allow access.'
+                        : 'Location access is blocked. Please enable it in your browser settings.'
+                };
+            }
+
+            // Request location with iOS-optimized options
             const position = await new Promise((resolve, reject) => {
-                navigator.geolocation.getCurrentPosition(resolve, reject, {
-                    enableHighAccuracy: true,
-                    timeout: 10000
-                });
+                const timeout = isIOS ? 30000 : 15000; // 30s for iOS, 15s for others
+                
+                navigator.geolocation.getCurrentPosition(
+                    resolve, 
+                    reject, 
+                    {
+                        enableHighAccuracy: true,
+                        timeout: timeout,
+                        maximumAge: 60000 // Accept cached position up to 1 minute old
+                    }
+                );
             });
+
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting trip...';
 
             const startTime = new Date().toISOString();
             const trip = await API.trips.create(startTime);
 
             localStorage.setItem('activeTrip', JSON.stringify({
                 tripId: trip.tripId,
-                startTime: startTime
+                startTime: startTime,
+                initialPosition: {
+                    lat: position.coords.latitude,
+                    lon: position.coords.longitude
+                }
             }));
 
             window.location.href = '/trip/record';
         } catch (error) {
-            showAlert('Failed to start trip: ' + error.message, 'danger');
+            let errorMessage;
+            
+            if (error.code !== undefined) {
+                // GeolocationPositionError
+                errorMessage = getGeolocationErrorMessage(error);
+            } else {
+                // Regular error (e.g., API error)
+                errorMessage = error.message || 'Failed to start trip. Please try again.';
+            }
+            
+            showAlert(errorMessage, 'danger');
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-play-circle"></i> Start Recording';
         }
