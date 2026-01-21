@@ -61,10 +61,12 @@
     let coordinateCount = 0;
     let pathCoordinates = [];  // For map display [lat, lon]
     let pendingCoordinates = [];   // Coordinates waiting to be sent
+    let recentCoordinates = [];    // Last few coordinates with timestamps for speed calc
     let sentCoordinatesCount = 0;  // Track how many have been sent
     let sendBatchInterval = null;
     const BATCH_SIZE = 20;  // Send batch every 20 coordinates
     const BATCH_INTERVAL = 30000;  // Or every 30 seconds
+    const MAX_RECENT_FOR_SPEED = 5;  // Keep last 5 points for speed calculation
 
     function initMap() {
         map = L.map('mapContainer').setView([45.4642, 9.1900], 15);
@@ -123,7 +125,7 @@
         if (pathCoordinates.length < 2) return;
         
         let totalDistance = 0;
-        let maxSpeed = 0;
+        let currentSpeed = 0;
         
         for (let i = 1; i < pathCoordinates.length; i++) {
             const prev = pathCoordinates[i - 1];
@@ -137,8 +139,28 @@
             totalDistance += segmentDist;
         }
         
+        // Calculate current speed from recent coordinates (with actual timestamps)
+        if (recentCoordinates.length >= 2) {
+            let recentDist = 0;
+            for (let i = 1; i < recentCoordinates.length; i++) {
+                const prev = recentCoordinates[i - 1];
+                const curr = recentCoordinates[i];
+                const d = calculateDistance(prev.lat, prev.lon, curr.lat, curr.lon);
+                if (d >= 1) recentDist += d;
+            }
+            
+            const firstTime = recentCoordinates[0].time;
+            const lastTime = recentCoordinates[recentCoordinates.length - 1].time;
+            const timeDiffSeconds = (lastTime - firstTime) / 1000;
+            
+            if (timeDiffSeconds > 0) {
+                currentSpeed = recentDist / timeDiffSeconds; // m/s
+            }
+        }
+        
         // Update UI with local calculations
         document.getElementById('distance').textContent = (totalDistance / 1000).toFixed(2);
+        document.getElementById('speed').textContent = (currentSpeed * 3.6).toFixed(1); // Convert m/s to km/h
         document.getElementById('points').textContent = pathCoordinates.length;
     }
 
@@ -216,6 +238,13 @@
                     timestamp: activeTrip.startTime,
                     elevation: null
                 });
+                
+                // Add to recent coordinates for speed calculation
+                recentCoordinates.push({
+                    lat: lat,
+                    lon: lon,
+                    time: new Date(activeTrip.startTime).getTime()
+                });
             }
         }
 
@@ -258,6 +287,16 @@
                     timestamp: new Date().toISOString(),
                     elevation: elevation
                 });
+                
+                // Add to recent coordinates for speed calculation (keep only last N)
+                recentCoordinates.push({
+                    lat: lat,
+                    lon: lon,
+                    time: Date.now()
+                });
+                if (recentCoordinates.length > MAX_RECENT_FOR_SPEED) {
+                    recentCoordinates.shift();
+                }
                 
                 // Update local statistics
                 updateLocalStats();
