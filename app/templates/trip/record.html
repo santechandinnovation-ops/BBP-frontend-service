@@ -60,7 +60,11 @@
     let watchId = null;
     let coordinateCount = 0;
     let pathCoordinates = [];  // For map display [lat, lon]
-    let allCoordinates = [];   // All coordinates with full data for batch upload
+    let pendingCoordinates = [];   // Coordinates waiting to be sent
+    let sentCoordinatesCount = 0;  // Track how many have been sent
+    let sendBatchInterval = null;
+    const BATCH_SIZE = 20;  // Send batch every 20 coordinates
+    const BATCH_INTERVAL = 30000;  // Or every 30 seconds
 
     function initMap() {
         map = L.map('mapContainer').setView([45.4642, 9.1900], 15);
@@ -102,50 +106,74 @@
         return R * c;
     }
 
+    // Get all coordinates (sent + pending) for statistics
+    function getAllCoordinatesForStats() {
+        // We need to track all coordinates for local stats display
+        // This is reconstructed from pathCoordinates which has all points
+        return pathCoordinates.map((coord, idx) => ({
+            latitude: coord[0],
+            longitude: coord[1],
+            // Approximate timestamp based on trip start and index
+            timestamp: new Date(startTime.getTime() + idx * 3000).toISOString()
+        }));
+    }
+
     // Calculate and display local statistics
     function updateLocalStats() {
-        if (allCoordinates.length < 2) return;
+        if (pathCoordinates.length < 2) return;
         
         let totalDistance = 0;
         let maxSpeed = 0;
         
-        for (let i = 1; i < allCoordinates.length; i++) {
-            const prev = allCoordinates[i - 1];
-            const curr = allCoordinates[i];
+        for (let i = 1; i < pathCoordinates.length; i++) {
+            const prev = pathCoordinates[i - 1];
+            const curr = pathCoordinates[i];
             
-            const segmentDist = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+            const segmentDist = calculateDistance(prev[0], prev[1], curr[0], curr[1]);
             
             // Skip GPS noise (< 1 meter)
             if (segmentDist < 1) continue;
             
             totalDistance += segmentDist;
-            
-            const timeDiff = (new Date(curr.timestamp) - new Date(prev.timestamp)) / 1000;
-            if (timeDiff > 0) {
-                const speed = segmentDist / timeDiff; // m/s
-                // Filter unrealistic speeds (> 50 m/s = 180 km/h)
-                if (speed < 50) {
-                    maxSpeed = Math.max(maxSpeed, speed);
-                }
-            }
         }
         
         // Update UI with local calculations
         document.getElementById('distance').textContent = (totalDistance / 1000).toFixed(2);
-        document.getElementById('points').textContent = allCoordinates.length;
+        document.getElementById('points').textContent = pathCoordinates.length;
         
-        // Calculate current speed from last two points
-        if (allCoordinates.length >= 2) {
-            const last = allCoordinates[allCoordinates.length - 1];
-            const prev = allCoordinates[allCoordinates.length - 2];
-            const timeDiff = (new Date(last.timestamp) - new Date(prev.timestamp)) / 1000;
-            if (timeDiff > 0) {
-                const dist = calculateDistance(prev.latitude, prev.longitude, last.latitude, last.longitude);
-                const currentSpeed = (dist / timeDiff) * 3.6; // Convert m/s to km/h
-                if (currentSpeed < 180) { // Filter unrealistic speeds
-                    document.getElementById('speed').textContent = currentSpeed.toFixed(1);
-                }
-            }
+        // Show sync status
+        const pending = pendingCoordinates.length;
+        const synced = sentCoordinatesCount;
+        if (pending > 0) {
+            document.getElementById('points').textContent = `${pathCoordinates.length} (${pending} pending)`;
+        }
+    }
+
+    // Send a batch of coordinates to the server
+    async function sendPendingBatch() {
+        if (pendingCoordinates.length === 0) return;
+        
+        // Take up to BATCH_SIZE coordinates
+        const batchToSend = pendingCoordinates.slice(0, BATCH_SIZE);
+        
+        try {
+            await API.trips.addCoordinatesBatch(tripId, batchToSend);
+            
+            // Remove sent coordinates from pending
+            pendingCoordinates = pendingCoordinates.slice(batchToSend.length);
+            sentCoordinatesCount += batchToSend.length;
+            
+            console.log(`Sent ${batchToSend.length} coordinates. Pending: ${pendingCoordinates.length}, Total sent: ${sentCoordinatesCount}`);
+        } catch (error) {
+            console.error('Failed to send coordinate batch:', error);
+            // Keep coordinates in pending for retry
+        }
+    }
+
+    // Check if we should send a batch (called periodically and on new coordinates)
+    function checkAndSendBatch() {
+        if (pendingCoordinates.length >= BATCH_SIZE) {
+            sendPendingBatch();
         }
     }
 
@@ -188,8 +216,8 @@
                 pathCoordinates.push([lat, lon]);
                 pathPolyline.setLatLngs(pathCoordinates);
                 
-                // Add initial position to coordinates
-                allCoordinates.push({
+                // Add initial position to pending coordinates
+                pendingCoordinates.push({
                     latitude: lat,
                     longitude: lon,
                     timestamp: activeTrip.startTime,
@@ -230,8 +258,8 @@
                 currentMarker = L.marker([lat, lon]).addTo(map);
                 map.setView([lat, lon], map.getZoom());
 
-                // Store coordinate locally (will be sent in batch at the end)
-                allCoordinates.push({
+                // Add to pending coordinates
+                pendingCoordinates.push({
                     latitude: lat,
                     longitude: lon,
                     timestamp: new Date().toISOString(),
@@ -240,6 +268,9 @@
                 
                 // Update local statistics
                 updateLocalStats();
+                
+                // Check if we should send a batch
+                checkAndSendBatch();
             },
             (error) => {
                 console.error('GPS error:', error.code, error.message);
@@ -269,14 +300,21 @@
         if (watchId) {
             navigator.geolocation.clearWatch(watchId);
         }
+        
+        // Stop periodic batch sending
+        if (sendBatchInterval) {
+            clearInterval(sendBatchInterval);
+            sendBatchInterval = null;
+        }
 
         try {
-            // Send all coordinates in a single batch request
-            if (allCoordinates.length > 0) {
-                btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Uploading ${allCoordinates.length} points...`;
+            // Send only remaining pending coordinates (most already sent during trip)
+            if (pendingCoordinates.length > 0) {
+                btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Uploading ${pendingCoordinates.length} remaining points...`;
                 
-                await API.trips.addCoordinatesBatch(tripId, allCoordinates);
-                console.log(`Successfully uploaded ${allCoordinates.length} coordinates`);
+                await API.trips.addCoordinatesBatch(tripId, pendingCoordinates);
+                console.log(`Successfully uploaded ${pendingCoordinates.length} remaining coordinates`);
+                pendingCoordinates = [];
             }
 
             btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Calculating statistics...';
@@ -300,5 +338,7 @@
     setInterval(updateTimer, 1000);
     // Update local stats every 2 seconds
     setInterval(updateLocalStats, 2000);
+    // Periodic batch sending every 30 seconds
+    sendBatchInterval = setInterval(sendPendingBatch, BATCH_INTERVAL);
 </script>
 {% endblock %}
