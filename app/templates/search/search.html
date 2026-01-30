@@ -108,6 +108,31 @@
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
+    .map-loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.8);
+        z-index: 1000;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    }
+    .map-loading-overlay.active {
+        display: flex;
+    }
+    .map-loading-overlay .spinner-border {
+        width: 3rem;
+        height: 3rem;
+    }
+    .map-loading-overlay .loading-text {
+        margin-top: 10px;
+        font-weight: 500;
+        color: #198754;
+    }
     .route-card.selected {
         transform: scale(1.02);
     }
@@ -199,6 +224,12 @@
         <div class="map-instruction" id="mapInstruction">
             <i class="bi bi-cursor me-2"></i>
             <span id="mapInstructionText">Click on the map to set origin</span>
+        </div>
+        <div class="map-loading-overlay" id="mapLoadingOverlay">
+            <div class="spinner-border text-success" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div class="loading-text">Loading route...</div>
         </div>
     </div>
 
@@ -618,6 +649,10 @@
     async function showRouteOnMap(routeIndex) {
         if (routeIndex < 0 || routeIndex >= foundRoutes.length) return;
 
+        // Show loading overlay
+        const loadingOverlay = document.getElementById('mapLoadingOverlay');
+        loadingOverlay.classList.add('active');
+
         const route = foundRoutes[routeIndex];
         const colors = ['#0d6efd', '#198754', '#6f42c1', '#fd7e14'];
         const color = colors[routeIndex % colors.length];
@@ -712,6 +747,9 @@
             const allBounds = L.featureGroup([markersLayer, routesLayer]).getBounds();
             map.fitBounds(allBounds, { padding: [50, 50] });
         }
+
+        // Hide loading overlay
+        loadingOverlay.classList.remove('active');
 
         // Scroll to map
         document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'center' });
