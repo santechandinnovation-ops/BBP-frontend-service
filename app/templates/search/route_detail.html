@@ -9,34 +9,6 @@
         border: none;
         font-size: 20px;
     }
-    #mapContainer {
-        position: relative;
-    }
-    .map-loading-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(255, 255, 255, 0.8);
-        z-index: 1000;
-        display: none;
-        justify-content: center;
-        align-items: center;
-        flex-direction: column;
-    }
-    .map-loading-overlay.active {
-        display: flex;
-    }
-    .map-loading-overlay .spinner-border {
-        width: 3rem;
-        height: 3rem;
-    }
-    .map-loading-overlay .loading-text {
-        margin-top: 10px;
-        font-weight: 500;
-        color: #198754;
-    }
 </style>
 {% endblock %}
 
@@ -147,14 +119,7 @@
                     </div>
                 </div>
 
-                <div class="map-container mb-3" id="mapContainer">
-                    <div class="map-loading-overlay active" id="mapLoadingOverlay">
-                        <div class="spinner-border text-success" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <div class="loading-text">Loading route on map...</div>
-                    </div>
-                </div>
+                <div class="map-container mb-3" id="mapContainer"></div>
 
                 <div class="card">
                     <div class="card-body">
@@ -266,9 +231,6 @@
             if (allBounds.length > 0) {
                 map.fitBounds(allBounds, { padding: [30, 30] });
             }
-
-            // Hide loading overlay
-            document.getElementById('mapLoadingOverlay').classList.remove('active');
 
         } catch (error) {
             document.getElementById('routeContent').innerHTML = `

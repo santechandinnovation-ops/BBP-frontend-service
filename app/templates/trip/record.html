@@ -203,6 +203,12 @@
     
     // Detect iOS devices
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    
+    // Fallback polling interval for when watchPosition doesn't fire
+    let gpsPollingInterval = null;
+    let lastPositionTime = 0;
+    const GPS_POLLING_INTERVAL = 3000; // Poll every 3 seconds as fallback
+    const POSITION_STALE_THRESHOLD = 5000; // Consider position stale after 5 seconds
 
     // Get user-friendly GPS error message
     function getGPSErrorMessage(error) {
@@ -217,6 +223,92 @@
                 return 'GPS signal weak. Continuing to try...';
             default:
                 return 'GPS error occurred. Attempting to reconnect...';
+        }
+    }
+    
+    // Process a new GPS position (shared between watchPosition and polling)
+    function processGPSPosition(position) {
+        gpsErrorCount = 0;
+        lastPositionTime = Date.now();
+        
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const elevation = position.coords.altitude;
+        const accuracy = position.coords.accuracy;
+
+        // Only add point if accuracy is reasonable (< 100 meters)
+        if (accuracy && accuracy > 100) {
+            console.log('Skipping low accuracy position:', accuracy);
+            return;
+        }
+        
+        // Skip if this is essentially the same position as the last one (within 2 meters)
+        if (pathCoordinates.length > 0) {
+            const lastCoord = pathCoordinates[pathCoordinates.length - 1];
+            const distFromLast = calculateDistance(lastCoord[0], lastCoord[1], lat, lon);
+            if (distFromLast < 2) {
+                console.log('Skipping duplicate position, distance:', distFromLast.toFixed(2), 'm');
+                return;
+            }
+        }
+
+        // Update map display
+        pathCoordinates.push([lat, lon]);
+        pathPolyline.setLatLngs(pathCoordinates);
+
+        if (currentMarker) {
+            map.removeLayer(currentMarker);
+        }
+        currentMarker = L.marker([lat, lon]).addTo(map);
+        map.setView([lat, lon], map.getZoom());
+
+        // Add to pending coordinates
+        pendingCoordinates.push({
+            latitude: lat,
+            longitude: lon,
+            timestamp: new Date().toISOString(),
+            elevation: elevation
+        });
+        
+        // Add to recent coordinates for speed calculation (keep only last N)
+        recentCoordinates.push({
+            lat: lat,
+            lon: lon,
+            time: Date.now()
+        });
+        if (recentCoordinates.length > MAX_RECENT_FOR_SPEED) {
+            recentCoordinates.shift();
+        }
+        
+        // Update local statistics
+        updateLocalStats();
+        
+        // Check if we should send a batch
+        checkAndSendBatch();
+    }
+    
+    // Fallback polling function - used when watchPosition doesn't fire
+    function pollGPSPosition() {
+        const timeSinceLastPosition = Date.now() - lastPositionTime;
+        
+        // Only poll if we haven't received a position recently
+        if (timeSinceLastPosition > POSITION_STALE_THRESHOLD) {
+            console.log('watchPosition stale, polling for position...');
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    console.log('Got position from polling');
+                    processGPSPosition(position);
+                },
+                (error) => {
+                    console.log('Polling GPS error:', error.code);
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0, // Force fresh position
+                    timeout: isIOS ? 15000 : 10000
+                }
+            );
         }
     }
 
@@ -251,6 +343,12 @@
                     lon: lon,
                     time: new Date(activeTrip.startTime).getTime()
                 });
+                
+                // Mark that we have a position
+                lastPositionTime = Date.now();
+                
+                // Update stats with initial point
+                updateLocalStats();
             }
         }
 
@@ -263,52 +361,7 @@
 
         watchId = navigator.geolocation.watchPosition(
             (position) => {
-                gpsErrorCount = 0;
-                
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                const elevation = position.coords.altitude;
-                const accuracy = position.coords.accuracy;
-
-                // Only add point if accuracy is reasonable (< 100 meters)
-                if (accuracy && accuracy > 100) {
-                    console.log('Skipping low accuracy position:', accuracy);
-                    return;
-                }
-
-                // Update map display
-                pathCoordinates.push([lat, lon]);
-                pathPolyline.setLatLngs(pathCoordinates);
-
-                if (currentMarker) {
-                    map.removeLayer(currentMarker);
-                }
-                currentMarker = L.marker([lat, lon]).addTo(map);
-                map.setView([lat, lon], map.getZoom());
-
-                // Add to pending coordinates
-                pendingCoordinates.push({
-                    latitude: lat,
-                    longitude: lon,
-                    timestamp: new Date().toISOString(),
-                    elevation: elevation
-                });
-                
-                // Add to recent coordinates for speed calculation (keep only last N)
-                recentCoordinates.push({
-                    lat: lat,
-                    lon: lon,
-                    time: Date.now()
-                });
-                if (recentCoordinates.length > MAX_RECENT_FOR_SPEED) {
-                    recentCoordinates.shift();
-                }
-                
-                // Update local statistics
-                updateLocalStats();
-                
-                // Check if we should send a batch
-                checkAndSendBatch();
+                processGPSPosition(position);
             },
             (error) => {
                 console.error('GPS error:', error.code, error.message);
@@ -327,6 +380,9 @@
             },
             geoOptions
         );
+        
+        // Start fallback polling to ensure we get positions even if watchPosition is unreliable
+        gpsPollingInterval = setInterval(pollGPSPosition, GPS_POLLING_INTERVAL);
     }
 
     document.getElementById('stopTripBtn').addEventListener('click', async () => {
@@ -337,6 +393,12 @@
         // Stop GPS tracking
         if (watchId) {
             navigator.geolocation.clearWatch(watchId);
+        }
+        
+        // Stop GPS polling fallback
+        if (gpsPollingInterval) {
+            clearInterval(gpsPollingInterval);
+            gpsPollingInterval = null;
         }
         
         // Stop periodic batch sending
