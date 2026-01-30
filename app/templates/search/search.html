@@ -566,11 +566,11 @@
                         <div class="row g-2 mt-2">
                             <div class="col-6 col-md-3">
                                 <div class="text-muted small">Distance</div>
-                                <strong>${formatDistance(route.totalDistance)}</strong>
+                                <strong>${formatDistanceKm(route.totalDistance)}</strong>
                             </div>
                             <div class="col-6 col-md-3">
                                 <div class="text-muted small">Quality Score</div>
-                                <strong class="${route.score >= 7 ? 'text-success' : route.score >= 4 ? 'text-warning' : 'text-danger'}">${route.score.toFixed(1)}/10</strong>
+                                <strong class="${route.score >= 700 ? 'text-success' : route.score >= 400 ? 'text-warning' : 'text-danger'}">${route.score.toFixed(0)}</strong>
                             </div>
                             <div class="col-6 col-md-3">
                                 <div class="text-muted small">Condition</div>
@@ -645,14 +645,11 @@
             'REQUIRES_MAINTENANCE': '#dc3545'
         };
 
-        // Process all segments and get road-projected routes
-        for (const segment of route.segments) {
-            const segmentColor = statusColors[segment.status] || color;
-            
-            let coords;
+        // Fetch all OSRM routes in parallel to reduce lag
+        const routePromises = route.segments.map(async (segment) => {
             if (segment.routeGeometry && segment.routeGeometry.length > 0) {
                 // Use pre-saved geometry if available
-                coords = segment.routeGeometry.map(c => [c[1], c[0]]); // Convert [lon, lat] to [lat, lon]
+                return segment.routeGeometry.map(c => [c[1], c[0]]); // Convert [lon, lat] to [lat, lon]
             } else {
                 // Fetch road-projected route from OSRM for visualization
                 const roadRoute = await getRouteOnRoad(
@@ -661,15 +658,24 @@
                 );
                 
                 if (roadRoute && roadRoute.length > 0) {
-                    coords = roadRoute; // Already in [lat, lon] format
+                    return roadRoute; // Already in [lat, lon] format
                 } else {
                     // Fallback to straight line if OSRM fails
-                    coords = [
+                    return [
                         [segment.startLatitude, segment.startLongitude],
                         [segment.endLatitude, segment.endLongitude]
                     ];
                 }
             }
+        });
+
+        // Wait for all routes to be fetched in parallel
+        const allCoords = await Promise.all(routePromises);
+
+        // Now draw all segments with their fetched coordinates
+        route.segments.forEach((segment, index) => {
+            const segmentColor = statusColors[segment.status] || color;
+            const coords = allCoords[index];
 
             L.polyline(coords, {
                 color: segmentColor,
@@ -679,7 +685,7 @@
             .bindPopup(`
                 <strong>Segment</strong><br>
                 Status: ${segment.status}<br>
-                Distance: ${formatDistance(segment.distance || 0)}
+                Distance: ${segment.distance ? formatDistanceKm(segment.distance / 1000) : 'N/A'}
             `);
 
             // Draw obstacles for this segment
@@ -699,7 +705,7 @@
                     `);
                 });
             }
-        }
+        });
 
         // Fit map to show the route
         if (routesLayer.getLayers().length > 0) {

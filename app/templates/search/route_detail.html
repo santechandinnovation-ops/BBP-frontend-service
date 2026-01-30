@@ -2,6 +2,16 @@
 
 {% block title %}Route Details - Best Bike Paths{% endblock %}
 
+{% block extra_css %}
+<style>
+    .obstacle-marker {
+        background: transparent;
+        border: none;
+        font-size: 20px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid p-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -23,6 +33,54 @@
 <script>
     const routeId = '{{ route_id }}';
 
+    // Decode polyline from OSRM (uses Google polyline encoding)
+    function decodePolyline(encoded) {
+        let points = [];
+        let index = 0, lat = 0, lng = 0;
+
+        while (index < encoded.length) {
+            let b, shift = 0, result = 0;
+            do {
+                b = encoded.charCodeAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20);
+            let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+            lat += dlat;
+
+            shift = 0;
+            result = 0;
+            do {
+                b = encoded.charCodeAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20);
+            let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+            lng += dlng;
+
+            points.push([lat / 1e5, lng / 1e5]);
+        }
+        return points;
+    }
+
+    // Get route from OSRM that follows actual roads (for visualization only)
+    async function getRouteOnRoad(startLat, startLng, endLat, endLng) {
+        try {
+            const url = `https://router.project-osrm.org/route/v1/bike/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=polyline`;
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                return decodePolyline(data.routes[0].geometry);
+            }
+            return null;
+        } catch (error) {
+            console.error('Error fetching route from OSRM:', error);
+            return null;
+        }
+    }
+
     async function loadRouteDetails() {
         try {
             const route = await API.paths.getDetail(routeId);
@@ -35,13 +93,13 @@
                         <div class="row mt-3">
                             <div class="col-md-3">
                                 <div class="text-center">
-                                    <div class="h3 text-success">${formatDistance(route.totalDistance)}</div>
+                                    <div class="h3 text-success">${formatDistanceKm(route.totalDistance)}</div>
                                     <div class="small text-muted">Total Distance</div>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="text-center">
-                                    <div class="h3 text-success">${route.score.toFixed(1)}/10</div>
+                                    <div class="h3 text-success">${route.score.toFixed(0)}</div>
                                     <div class="small text-muted">Accessibility Score</div>
                                 </div>
                             </div>
@@ -103,22 +161,56 @@
 
             document.getElementById('routeContent').innerHTML = html;
 
+            // Initialize map
             const map = L.map('mapContainer').setView([route.segments[0].startLatitude, route.segments[0].startLongitude], 14);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
 
+            const statusColors = {
+                'OPTIMAL': '#28a745',
+                'MEDIUM': '#ffc107', 
+                'SUFFICIENT': '#fd7e14',
+                'REQUIRES_MAINTENANCE': '#dc3545'
+            };
+
+            // Fetch all OSRM routes in parallel for better performance
+            const routePromises = route.segments.map(async (segment) => {
+                const roadRoute = await getRouteOnRoad(
+                    segment.startLatitude, segment.startLongitude,
+                    segment.endLatitude, segment.endLongitude
+                );
+                
+                if (roadRoute && roadRoute.length > 0) {
+                    return roadRoute;
+                } else {
+                    // Fallback to straight line if OSRM fails
+                    return [
+                        [segment.startLatitude, segment.startLongitude],
+                        [segment.endLatitude, segment.endLongitude]
+                    ];
+                }
+            });
+
+            // Wait for all routes to be fetched
+            const allCoords = await Promise.all(routePromises);
+            const allBounds = [];
+
+            // Draw all segments
             route.segments.forEach((segment, index) => {
-                const color = getStatusColor(segment.status);
-                L.polyline([
-                    [segment.startLatitude, segment.startLongitude],
-                    [segment.endLatitude, segment.endLongitude]
-                ], {
+                const color = statusColors[segment.status] || '#6c757d';
+                const coords = allCoords[index];
+
+                // Add points to bounds
+                coords.forEach(coord => allBounds.push(coord));
+
+                L.polyline(coords, {
                     color: color,
                     weight: 5,
                     opacity: 0.8
                 }).addTo(map).bindPopup(`Segment ${index + 1}: ${segment.status}`);
 
+                // Draw obstacles
                 segment.obstacles.forEach(obstacle => {
                     L.marker([obstacle.latitude, obstacle.longitude], {
                         icon: L.divIcon({
@@ -134,6 +226,11 @@
                     `);
                 });
             });
+
+            // Fit map to show all route segments
+            if (allBounds.length > 0) {
+                map.fitBounds(allBounds, { padding: [30, 30] });
+            }
 
         } catch (error) {
             document.getElementById('routeContent').innerHTML = `

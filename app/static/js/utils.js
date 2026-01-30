@@ -72,6 +72,14 @@ function formatDistance(meters) {
     return `${(meters / 1000).toFixed(2)} km`;
 }
 
+// Format distance when value is already in kilometers
+function formatDistanceKm(km) {
+    if (km < 1) {
+        return `${(km * 1000).toFixed(0)} m`;
+    }
+    return `${km.toFixed(2)} km`;
+}
+
 function formatDuration(seconds) {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
