@@ -417,7 +417,6 @@
             if (pendingCoordinates.length > 0) {
                 btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Uploading ${pendingCoordinates.length} remaining points...`;
                 
-                // Send directly without using sendPendingBatch to avoid flag issues
                 await API.trips.addCoordinatesBatch(tripId, pendingCoordinates);
                 console.log(`Successfully uploaded ${pendingCoordinates.length} remaining coordinates`);
                 pendingCoordinates = [];

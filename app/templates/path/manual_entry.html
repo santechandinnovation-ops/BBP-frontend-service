@@ -304,7 +304,7 @@
     // Get route from OSRM that follows actual roads
     async function getRouteOnRoad(startLat, startLng, endLat, endLng) {
         try {
-            // Using OSRM demo server - for production use your own server
+            // Using OSRM demo server
             const url = `https://router.project-osrm.org/route/v1/bike/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=polyline`;
             
             const response = await fetch(url);
@@ -364,7 +364,7 @@
         // Create segment when we have at least 2 points
         if (pathPoints.length >= 2) {
             isLoadingRoute = true;
-            showModeIndicator('🔄 Calculating route on road...', false);
+            showModeIndicator('Calculating route on road...', false);
             
             const segIndex = pathPoints.length - 2;
             const startPoint = pathPoints[segIndex];
@@ -606,7 +606,7 @@
         const card = document.getElementById(`segmentCard${index}`);
         card.className = `card mb-2 segment-card status-${status}`;
         
-        // Update polyline color on map
+        // update polyline color on map
         updatePathDisplay();
     }
 
@@ -684,7 +684,7 @@
         return R * c;
     }
 
-    // Project a point onto a line segment
+    // roject a point onto a line segment
     function projectPointOnLine(px, py, x1, y1, x2, y2) {
         const dx = x2 - x1;
         const dy = y2 - y1;
@@ -718,7 +718,7 @@
     });
 
     document.getElementById('confirmObstacleBtn').addEventListener('click', () => {
-        // Store pending obstacle configuration
+        // store pending obstacle configuration
         pendingObstacle = {
             type: document.getElementById('obstacleType').value,
             severity: document.getElementById('obstacleSeverity').value,
@@ -752,7 +752,7 @@
         
         if (nearest.distance > maxDistance) {
             showAlert(`Please click closer to the path. The obstacle must be within ${maxDistance}m of the route.`, 'warning');
-            return; // Don't place the obstacle, let the user try again
+            return; // Don't place the obstcle, let the user try again
         }
 
         // Use the snapped coordinates (nearest point on path)
