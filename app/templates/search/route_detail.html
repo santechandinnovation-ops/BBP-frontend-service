@@ -9,6 +9,34 @@
         border: none;
         font-size: 20px;
     }
+    #mapContainer {
+        position: relative;
+    }
+    .map-loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.8);
+        z-index: 1000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    }
+    .map-loading-overlay.hidden {
+        display: none;
+    }
+    .map-loading-overlay .spinner-border {
+        width: 3rem;
+        height: 3rem;
+    }
+    .map-loading-overlay .loading-text {
+        margin-top: 10px;
+        font-weight: 500;
+        color: #198754;
+    }
 </style>
 {% endblock %}
 
@@ -32,6 +60,33 @@
 {% block extra_scripts %}
 <script>
     const routeId = '{{ route_id }}';
+    
+    // Cache for OSRM routes to avoid duplicate requests
+    const osrmCache = new Map();
+
+    // Get obstacle icon based on type
+    function getObstacleIcon(type) {
+        const icons = {
+            'POTHOLE': '🕳️',
+            'ROUGH_SURFACE': '🪨',
+            'DEBRIS': '🗑️',
+            'CONSTRUCTION': '🚧',
+            'OTHER': '⚠️'
+        };
+        return icons[type] || '⚠️';
+    }
+    
+    // Get obstacle label
+    function getObstacleLabel(type) {
+        const labels = {
+            'POTHOLE': 'Pothole',
+            'ROUGH_SURFACE': 'Rough Surface',
+            'DEBRIS': 'Debris',
+            'CONSTRUCTION': 'Construction',
+            'OTHER': 'Other Obstacle'
+        };
+        return labels[type] || type;
+    }
 
     // Decode polyline from OSRM (uses Google polyline encoding)
     function decodePolyline(encoded) {
@@ -63,8 +118,15 @@
         return points;
     }
 
-    // Get route from OSRM that follows actual roads (for visualization only)
+    // Get route from OSRM that follows actual roads (with caching)
     async function getRouteOnRoad(startLat, startLng, endLat, endLng) {
+        const cacheKey = `${startLat},${startLng}-${endLat},${endLng}`;
+        
+        // Check cache first
+        if (osrmCache.has(cacheKey)) {
+            return osrmCache.get(cacheKey);
+        }
+        
         try {
             const url = `https://router.project-osrm.org/route/v1/bike/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=polyline`;
             
@@ -72,7 +134,9 @@
             const data = await response.json();
             
             if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-                return decodePolyline(data.routes[0].geometry);
+                const decoded = decodePolyline(data.routes[0].geometry);
+                osrmCache.set(cacheKey, decoded);
+                return decoded;
             }
             return null;
         } catch (error) {
@@ -119,7 +183,14 @@
                     </div>
                 </div>
 
-                <div class="map-container mb-3" id="mapContainer"></div>
+                <div class="map-container mb-3" id="mapContainer">
+                    <div class="map-loading-overlay" id="mapLoadingOverlay">
+                        <div class="spinner-border text-success" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <div class="loading-text">Loading route on map...</div>
+                    </div>
+                </div>
 
                 <div class="card">
                     <div class="card-body">
@@ -142,8 +213,8 @@
                                 <ul class="mb-0 mt-1">
                                     ${segment.obstacles.map(obs => `
                                         <li>
-                                            <span class="badge bg-danger">${obs.type}</span>
-                                            <span class="badge bg-warning text-dark">${obs.severity}</span>
+                                            ${getObstacleIcon(obs.type)} <strong>${getObstacleLabel(obs.type)}</strong>
+                                            <span class="badge bg-warning text-dark ms-1">${obs.severity}</span>
                                             ${obs.description ? `- ${obs.description}` : ''}
                                         </li>
                                     `).join('')}
@@ -210,17 +281,18 @@
                     opacity: 0.8
                 }).addTo(map).bindPopup(`Segment ${index + 1}: ${segment.status}`);
 
-                // Draw obstacles
+                // Draw obstacles with specific icons
                 segment.obstacles.forEach(obstacle => {
                     L.marker([obstacle.latitude, obstacle.longitude], {
                         icon: L.divIcon({
                             className: 'obstacle-marker',
-                            html: '<i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 24px;"></i>',
-                            iconSize: [24, 24]
+                            html: `<span style="font-size: 24px; filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));">${getObstacleIcon(obstacle.type)}</span>`,
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 12]
                         })
                     }).addTo(map)
                     .bindPopup(`
-                        <strong>${obstacle.type}</strong><br>
+                        <strong>${getObstacleIcon(obstacle.type)} ${getObstacleLabel(obstacle.type)}</strong><br>
                         Severity: ${obstacle.severity}<br>
                         ${obstacle.description ? obstacle.description : ''}
                     `);
@@ -231,6 +303,9 @@
             if (allBounds.length > 0) {
                 map.fitBounds(allBounds, { padding: [30, 30] });
             }
+            
+            // Hide loading overlay
+            document.getElementById('mapLoadingOverlay').classList.add('hidden');
 
         } catch (error) {
             document.getElementById('routeContent').innerHTML = `
