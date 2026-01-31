@@ -42,20 +42,20 @@
         throw new Error('Authentication required');
     }
 
-    // Detect iOS devices
+    // detect ios devices
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     
-    // Get user-friendly error message for geolocation errors
+    // get user friendly error msg for geolocation errors
     function getGeolocationErrorMessage(error) {
         switch(error.code) {
-            case 1: // PERMISSION_DENIED
+            case 1: // permision denied
                 if (isIOS) {
                     return 'Location access denied. Please go to Settings > Privacy & Security > Location Services, ensure it is ON, then go to Safari > Location and select "Ask" or "Allow".';
                 }
                 return 'Location access denied. Please allow location access in your browser settings and try again.';
-            case 2: // POSITION_UNAVAILABLE
+            case 2: // position unavailble
                 return 'Location information unavailable. Please make sure GPS/Location Services is enabled on your device.';
-            case 3: // TIMEOUT
+            case 3: // timeout
                 if (isIOS) {
                     return 'Location request timed out. Please ensure Location Services is enabled in Settings and try again in an open area.';
                 }
@@ -65,14 +65,14 @@
         }
     }
 
-    // Check geolocation permissions (where supported)
+    // check geolocation perms (where suported)
     async function checkGeolocationPermission() {
         if ('permissions' in navigator) {
             try {
                 const permission = await navigator.permissions.query({ name: 'geolocation' });
-                return permission.state; // 'granted', 'denied', or 'prompt'
+                return permission.state; // 'granted' or 'denied' or 'prompt'
             } catch (e) {
-                // Safari doesn't support permissions API for geolocation
+                // safari dosnt support permissions api for geolocation
                 return 'prompt';
             }
         }

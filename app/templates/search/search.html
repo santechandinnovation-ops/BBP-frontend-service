@@ -214,10 +214,10 @@
     let routesLayer;
     let originMarker = null;
     let destMarker = null;
-    let activeMapSelection = null; // 'origin' or 'dest'
+    let activeMapSelection = null; // origin or dest
     let searchTimeout = null;
 
-    // Initialize map
+    // init map
     function initMap() {
         map = L.map('mapContainer').setView([45.4642, 9.1900], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -229,7 +229,7 @@
         map.on('click', handleMapClick);
     }
 
-    // Handle map click for location selection
+    // handle map click for location selecton
     function handleMapClick(e) {
         if (!activeMapSelection) return;
 
@@ -238,14 +238,14 @@
 
         setLocation(activeMapSelection, lat, lng, 'Map selection');
         
-        // Reverse geocode to get address
+        // reverse geocode to get adress
         reverseGeocode(lat, lng, activeMapSelection);
         
-        // Exit map selection mode
+        // exit map selecton mode
         exitMapSelectionMode();
     }
 
-    // Reverse geocode coordinates to address
+    // reverse geocde coords to adress
     async function reverseGeocode(lat, lng, target) {
         try {
             const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
@@ -260,7 +260,7 @@
         }
     }
 
-    // Search for locations using Nominatim
+    // serch for locations using nominatim api
     async function searchLocation(query, target) {
         if (query.length < 3) {
             hideSuggestions(target);
@@ -278,7 +278,7 @@
         }
     }
 
-    // Show suggestions dropdown
+    // show sugestions dropdown
     function showSuggestions(results, target) {
         const container = document.getElementById(`${target}Suggestions`);
         
@@ -301,7 +301,7 @@
         container.innerHTML = html;
         container.style.display = 'block';
 
-        // Add click handlers
+        // add click handlers
         container.querySelectorAll('.suggestion-item').forEach(item => {
             item.addEventListener('click', () => {
                 const lat = parseFloat(item.dataset.lat);
@@ -320,19 +320,19 @@
         document.getElementById(`${target}Suggestions`).style.display = 'none';
     }
 
-    // Set location (origin or destination)
+    // set location (origin or destinaton)
     function setLocation(target, lat, lng, name) {
         document.getElementById(`${target}Lat`).value = lat;
         document.getElementById(`${target}Lon`).value = lng;
         document.getElementById(`${target}Coords`).textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 
-        // Update card styling
+        // update card styling
         const card = document.getElementById(`${target}Card`);
         card.classList.remove('active');
         card.classList.add('set');
         document.getElementById(`clear${target.charAt(0).toUpperCase() + target.slice(1)}`).style.display = 'block';
 
-        // Add/update marker
+        // add or update marker
         if (target === 'origin') {
             if (originMarker) map.removeLayer(originMarker);
             originMarker = L.marker([lat, lng], {
@@ -359,7 +359,7 @@
         fitMapToBounds();
     }
 
-    // Clear location
+    // clear location
     function clearLocation(target) {
         document.getElementById(`${target}Lat`).value = '';
         document.getElementById(`${target}Lon`).value = '';
@@ -381,7 +381,7 @@
         updateSearchButton();
     }
 
-    // Enter map selection mode
+    // enter map selecton mode
     function enterMapSelectionMode(target) {
         activeMapSelection = target;
         
@@ -392,11 +392,11 @@
 
         document.getElementById(`${target}Card`).classList.add('active');
         
-        // Scroll to map
+        // scroll to map
         document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    // Exit map selection mode
+    // exit map selecton mode
     function exitMapSelectionMode() {
         activeMapSelection = null;
         document.getElementById('mapInstruction').classList.remove('active');
@@ -404,7 +404,7 @@
         document.getElementById('destCard').classList.remove('active');
     }
 
-    // Use GPS for current location
+    // use gps for current locaton
     function useGPS(target) {
         if (!('geolocation' in navigator)) {
             showAlert('Geolocation is not supported by your browser', 'danger');
@@ -428,7 +428,7 @@
         );
     }
 
-    // Update search button state
+    // update search buton state
     function updateSearchButton() {
         const originLat = document.getElementById('originLat').value;
         const destLat = document.getElementById('destLat').value;
@@ -490,11 +490,11 @@
         }
     }
 
-    // Store found routes for click-to-display
+    // store found routes for click-to-disply
     let foundRoutes = [];
     let selectedRouteIndex = null;
 
-    // Display routes as a list (without showing on map initially)
+    // display routes as list (dont show on map yet)
     function displayRoutes(routes) {
         routesLayer.clearLayers();
         foundRoutes = routes || [];
@@ -645,22 +645,22 @@
             'REQUIRES_MAINTENANCE': '#dc3545'
         };
 
-        // Fetch all OSRM routes in parallel to reduce lag
+        // fetch all osrm routes in paralel (faster than one by one)
         const routePromises = route.segments.map(async (segment) => {
             if (segment.routeGeometry && segment.routeGeometry.length > 0) {
-                // Use pre-saved geometry if available
-                return segment.routeGeometry.map(c => [c[1], c[0]]); // Convert [lon, lat] to [lat, lon]
+                // use pre-saved geomtry if we have it
+                return segment.routeGeometry.map(c => [c[1], c[0]]); // convert [lon, lat] to [lat, lon]
             } else {
-                // Fetch road-projected route from OSRM for visualization
+                // fetch road route from osrm for visualzation
                 const roadRoute = await getRouteOnRoad(
                     segment.startLatitude, segment.startLongitude,
                     segment.endLatitude, segment.endLongitude
                 );
                 
                 if (roadRoute && roadRoute.length > 0) {
-                    return roadRoute; // Already in [lat, lon] format
+                    return roadRoute; // alredy in [lat, lon] format
                 } else {
-                    // Fallback to straight line if OSRM fails
+                    // fallback to strait line if osrm fails
                     return [
                         [segment.startLatitude, segment.startLongitude],
                         [segment.endLatitude, segment.endLongitude]
@@ -669,10 +669,10 @@
             }
         });
 
-        // Wait for all routes to be fetched in parallel
+        // wait for all routes to fetch in paralel
         const allCoords = await Promise.all(routePromises);
 
-        // Now draw all segments with their fetched coordinates
+        // now draw all segmnets with their coords
         route.segments.forEach((segment, index) => {
             const segmentColor = statusColors[segment.status] || color;
             const coords = allCoords[index];
@@ -707,17 +707,17 @@
             }
         });
 
-        // Fit map to show the route
+        // fit map to show the route
         if (routesLayer.getLayers().length > 0) {
             const allBounds = L.featureGroup([markersLayer, routesLayer]).getBounds();
             map.fitBounds(allBounds, { padding: [50, 50] });
         }
 
-        // Scroll to map
+        // scrol to map
         document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    // Get obstacle label
+    // get obstacal label
     function getObstacleLabel(type) {
         const labels = {
             'POTHOLE': 'Pothole',
@@ -729,7 +729,7 @@
         return labels[type] || type;
     }
 
-    // Get severity CSS class
+    // get severety css class
     function getSeverityClass(severity) {
         const classes = {
             'MINOR': 'text-warning',
@@ -739,7 +739,7 @@
         return classes[severity] || '';
     }
 
-    // Decode polyline from OSRM (uses Google polyline encoding)
+    // decode polyline from osrm (uses google polyline encodig)
     function decodePolyline(encoded) {
         let points = [];
         let index = 0, lat = 0, lng = 0;
@@ -769,7 +769,7 @@
         return points;
     }
 
-    // Get route from OSRM that follows actual roads (for visualization only)
+    // get route from osrm that follows real roads (for viz only)
     async function getRouteOnRoad(startLat, startLng, endLat, endLng) {
         try {
             const url = `https://router.project-osrm.org/route/v1/bike/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=polyline`;
@@ -787,7 +787,7 @@
         }
     }
 
-    // Get obstacle icon
+    // get obstacal icon emoji
     function getObstacleIcon(type) {
         const icons = {
             'POTHOLE': '🕳️',
@@ -799,7 +799,7 @@
         return icons[type] || '⚠️';
     }
 
-    // Event listeners
+    // event listenrs
     document.querySelectorAll('.method-toggle .btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const method = this.dataset.method;
@@ -822,7 +822,7 @@
         });
     });
 
-    // Search input handlers with debounce
+    // search input handlers w debounce
     ['origin', 'dest'].forEach(target => {
         const input = document.getElementById(`${target}Search`);
         
@@ -840,26 +840,26 @@
         });
 
         input.addEventListener('blur', function() {
-            // Delay hide to allow click on suggestions
+            // delay hide so we can click on sugestions
             setTimeout(() => hideSuggestions(target), 200);
         });
     });
 
-    // Clear buttons
+    // clear buttons
     document.getElementById('clearOrigin').addEventListener('click', () => clearLocation('origin'));
     document.getElementById('clearDest').addEventListener('click', () => clearLocation('dest'));
 
-    // Search button
+    // search button
     document.getElementById('searchBtn').addEventListener('click', searchRoutes);
 
-    // Close map selection mode on escape
+    // close map selecton mode on esc
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             exitMapSelectionMode();
         }
     });
 
-    // Initialize
+    // initalize
     initMap();
 </script>
 {% endblock %}

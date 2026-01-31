@@ -132,7 +132,7 @@
         try {
             await API.trips.delete(tripId);
             showAlert('Trip deleted successfully', 'success');
-            // Reload the trip list
+            // reload trip list
             loadTripHistory();
         } catch (error) {
             showAlert('Failed to delete trip: ' + error.message, 'danger');

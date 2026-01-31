@@ -112,7 +112,7 @@
 
             document.getElementById('tripContent').innerHTML = html;
 
-            // Filter out GPS anomalies (points that would require unrealistic speed)
+            // filter out gps anomalies (points that need unrealistic speed)
             const filteredCoords = filterGPSAnomalies(trip.coordinates);
             
             const map = L.map('mapContainer').setView([filteredCoords[0].latitude, filteredCoords[0].longitude], 14);
@@ -152,19 +152,19 @@
         }
     }
 
-    // Filter out GPS anomalies - points that would require unrealistic movement
+    // filter out gps anomalies - points that need unrealistic movment
     function filterGPSAnomalies(coordinates) {
         if (coordinates.length < 2) return coordinates;
         
-        const MAX_SPEED_MS = 25; // 25 m/s = 90 km/h max realistic cycling speed
-        const filtered = [coordinates[0]]; // Always keep first point
+        const MAX_SPEED_MS = 25; // 25 m/s = 90 km/h max realistc cycling speed
+        const filtered = [coordinates[0]]; // alwys keep first point
         
         for (let i = 1; i < coordinates.length; i++) {
             const prev = filtered[filtered.length - 1];
             const curr = coordinates[i];
             
-            // Calculate distance using Haversine formula
-            const R = 6371000; // Earth radius in meters
+            // calc distance with haversine formula
+            const R = 6371000; // earth radius in meters
             const lat1 = prev.latitude * Math.PI / 180;
             const lat2 = curr.latitude * Math.PI / 180;
             const dLat = (curr.latitude - prev.latitude) * Math.PI / 180;
@@ -176,20 +176,20 @@
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             const distance = R * c;
             
-            // Calculate time difference
+            // calc time diffrece
             const prevTime = new Date(prev.timestamp).getTime();
             const currTime = new Date(curr.timestamp).getTime();
-            const timeDiff = (currTime - prevTime) / 1000; // seconds
+            const timeDiff = (currTime - prevTime) / 1000; // in seconds
             
-            // Skip if time difference is invalid
+            // skip if time diff is invalid
             if (timeDiff <= 0) {
                 continue;
             }
             
-            // Calculate speed
+            // calc speed
             const speed = distance / timeDiff;
             
-            // Only include point if speed is realistic
+            // only include point if speed is realistc
             if (speed <= MAX_SPEED_MS) {
                 filtered.push(curr);
             } else {

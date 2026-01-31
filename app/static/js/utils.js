@@ -72,7 +72,7 @@ function formatDistance(meters) {
     return `${(meters / 1000).toFixed(2)} km`;
 }
 
-// Format distance when value is already in kilometers
+// format distance when its already in km
 function formatDistanceKm(km) {
     if (km < 1) {
         return `${(km * 1000).toFixed(0)} m`;
@@ -100,8 +100,8 @@ function formatSpeed(metersPerSecond) {
 
 function formatDateTime(dateStr) {
     if (!dateStr) return 'N/A';
-    // Ensure UTC timestamps are correctly parsed
-    // If the timestamp doesn't end with 'Z' or timezone offset, treat it as UTC
+    // make sure utc timestamps are parsed right
+    // if timestamp doesnt end with Z or timezone offset treat as utc
     let isoStr = String(dateStr);
     if (!isoStr.endsWith('Z') && !isoStr.match(/[+-]\d{2}:\d{2}$/)) {
         isoStr += 'Z';

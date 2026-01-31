@@ -61,10 +61,10 @@
 <script>
     const routeId = '{{ route_id }}';
     
-    // Cache for OSRM routes to avoid duplicate requests
+    // cache for osrm routes so we dont request the same thing twice
     const osrmCache = new Map();
 
-    // Get obstacle icon based on type
+    // get obstacal icon based on type
     function getObstacleIcon(type) {
         const icons = {
             'POTHOLE': '🕳️',
@@ -76,7 +76,7 @@
         return icons[type] || '⚠️';
     }
     
-    // Get obstacle label
+    // get obstacal label for display
     function getObstacleLabel(type) {
         const labels = {
             'POTHOLE': 'Pothole',
@@ -88,7 +88,7 @@
         return labels[type] || type;
     }
 
-    // Decode polyline from OSRM (uses Google polyline encoding)
+    // decode polyline from osrm (google polyline encodng)
     function decodePolyline(encoded) {
         let points = [];
         let index = 0, lat = 0, lng = 0;
@@ -118,11 +118,11 @@
         return points;
     }
 
-    // Get route from OSRM that follows actual roads (with caching)
+    // get route from osrm for roads (with cacheing)
     async function getRouteOnRoad(startLat, startLng, endLat, endLng) {
         const cacheKey = `${startLat},${startLng}-${endLat},${endLng}`;
         
-        // Check cache first
+        // check cache first
         if (osrmCache.has(cacheKey)) {
             return osrmCache.get(cacheKey);
         }
@@ -232,7 +232,7 @@
 
             document.getElementById('routeContent').innerHTML = html;
 
-            // Initialize map
+            // init map
             const map = L.map('mapContainer').setView([route.segments[0].startLatitude, route.segments[0].startLongitude], 14);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
@@ -245,7 +245,7 @@
                 'REQUIRES_MAINTENANCE': '#dc3545'
             };
 
-            // Fetch all OSRM routes in parallel for better performance
+            // fetch all osrm routes in paralell (way faster)
             const routePromises = route.segments.map(async (segment) => {
                 const roadRoute = await getRouteOnRoad(
                     segment.startLatitude, segment.startLongitude,
@@ -255,7 +255,7 @@
                 if (roadRoute && roadRoute.length > 0) {
                     return roadRoute;
                 } else {
-                    // Fallback to straight line if OSRM fails
+                    // fallback to strait line if osrm fails
                     return [
                         [segment.startLatitude, segment.startLongitude],
                         [segment.endLatitude, segment.endLongitude]
@@ -263,16 +263,16 @@
                 }
             });
 
-            // Wait for all routes to be fetched
+            // wait for all routes to be fetced
             const allCoords = await Promise.all(routePromises);
             const allBounds = [];
 
-            // Draw all segments
+            // draw all segmets
             route.segments.forEach((segment, index) => {
                 const color = statusColors[segment.status] || '#6c757d';
                 const coords = allCoords[index];
 
-                // Add points to bounds
+                // add points to bounds
                 coords.forEach(coord => allBounds.push(coord));
 
                 L.polyline(coords, {
@@ -281,7 +281,7 @@
                     opacity: 0.8
                 }).addTo(map).bindPopup(`Segment ${index + 1}: ${segment.status}`);
 
-                // Draw obstacles with specific icons
+                // draw obstacels with specific icons
                 segment.obstacles.forEach(obstacle => {
                     L.marker([obstacle.latitude, obstacle.longitude], {
                         icon: L.divIcon({
@@ -299,12 +299,12 @@
                 });
             });
 
-            // Fit map to show all route segments
+            // fit map to show all the route segmnets
             if (allBounds.length > 0) {
                 map.fitBounds(allBounds, { padding: [30, 30] });
             }
             
-            // Hide loading overlay
+            // hide loadng overlay
             document.getElementById('mapLoadingOverlay').classList.add('hidden');
 
         } catch (error) {
